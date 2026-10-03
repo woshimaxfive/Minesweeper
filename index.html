@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#edf2f8" />
+    <meta
+      name="description"
+      content="一个安静的扫雷小游戏。首次点击安全，支持手机操作、本地存档和离线游玩。"
+    />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="style.css" />
+    <title>扫雷 · Minesweeper</title>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="intro">
+        <a class="brand" href="./" aria-label="扫雷主页"
+          ><span class="brand-mark">✳</span><span>MINESWEEPER</span></a
+        >
+        <div class="intro-copy">
+          <p class="eyebrow">一格一格，慢慢来。</p>
+          <h1>扫雷<span class="title-dot">.</span></h1>
+          <p class="lead">数字是线索。<br />留一点耐心，找到每一片安全地带。</p>
+        </div>
+        <div class="guide">
+          <h2>从第一格开始</h2>
+          <p><span class="guide-symbol">↗</span>第一次点击会展开安全区域</p>
+          <p><span class="guide-symbol">⚑</span>长按标记雷，轻点打开格子</p>
+          <p><span class="guide-symbol">1</span>数字表示周围八格的雷数</p>
+          <p><span class="guide-symbol">⊞</span>旗数对应数字后，点击数字连开</p>
+          <small>经典随机棋盘，部分局面需要猜测。</small>
+        </div>
+      </aside>
+      <section class="console" aria-label="扫雷游戏">
+        <header class="console-header">
+          <div>
+            <p class="eyebrow">本局棋盘</p>
+            <button
+              class="difficulty-button"
+              id="difficulty"
+              aria-haspopup="dialog"
+            >
+              <span id="difficulty-name">初级</span
+              ><span class="chevron">⌄</span></button
+            ><span class="board-spec" id="board-spec">9 × 9 · 10 颗雷</span>
+          </div>
+          <button
+            class="icon-button"
+            id="theme"
+            aria-label="切换深色主题"
+            title="切换主题"
+          >
+            ◐
+          </button>
+        </header>
+        <div class="scoreboard">
+          <div class="metric">
+            <span class="metric-label"
+              ><span class="flag-icon">⚑</span> 剩余雷数</span
+            ><strong id="remaining">010</strong>
+          </div>
+          <button
+            class="restart"
+            id="restart"
+            title="重新开始"
+            aria-label="重新开始"
+          >
+            ↻
+          </button>
+          <div class="metric time-metric">
+            <span class="metric-label">本局用时</span
+            ><strong id="timer">00:00</strong>
+          </div>
+        </div>
+        <div class="board-surround">
+          <div class="board-viewport" id="viewport">
+            <div id="board" role="grid" aria-label="扫雷棋盘"></div>
+          </div>
+          <div class="pause-cover" id="pause-cover" hidden>
+            <span class="pause-symbol">Ⅱ</span>
+            <h2>歇一会儿</h2>
+            <p>棋盘已隐藏，计时已暂停。</p>
+            <button class="primary" id="resume">继续本局</button>
+          </div>
+        </div>
+        <div class="board-tools">
+          <span id="progress">已打开 0 / 71</span>
+          <div class="zoom-controls">
+            <button id="zoom-out" aria-label="缩小格子">−</button
+            ><button id="fit" title="适应棋盘宽度">适应</button
+            ><button id="zoom-in" aria-label="放大格子">＋</button>
+          </div>
+        </div>
+        <div class="action-row">
+          <div class="mode-switch" role="group" aria-label="点击操作">
+            <button id="open-mode" class="selected" aria-pressed="true">
+              ⊞ <span>开格</span></button
+            ><button id="flag-mode" aria-pressed="false">
+              ⚑ <span>插旗</span>
+            </button>
+          </div>
+          <button class="pause-button" id="pause" aria-label="暂停游戏">
+            Ⅱ <span>暂停</span>
+          </button>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite">
+          选一个格子，开始这一局。
+        </p>
+        <footer class="console-footer">
+          <span id="best">最佳用时 —</span
+          ><button id="help" aria-haspopup="dialog">玩法说明 ↗</button>
+        </footer>
+        <div class="local-state">
+          <span class="connection-dot"></span
+          ><span id="offline-state">进度保存在本机</span
+          ><button id="install" hidden>添加到桌面 ↗</button>
+        </div>
+      </section>
+    </main>
+    <dialog id="settings-dialog">
+      <form id="settings-form">
+        <div class="dialog-heading">
+          <h2>换一块棋盘</h2>
+          <button
+            type="button"
+            class="icon-button"
+            data-close
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <p class="muted">选择难度，或设定自己的挑战。</p>
+        <div class="preset-list">
+          <label
+            ><input type="radio" name="level" value="easy" checked /><span
+              ><strong>初级</strong><small>9 × 9</small></span
+            ><b>10 颗雷</b></label
+          ><label
+            ><input type="radio" name="level" value="medium" /><span
+              ><strong>中级</strong><small>16 × 16</small></span
+            ><b>40 颗雷</b></label
+          ><label
+            ><input type="radio" name="level" value="hard" /><span
+              ><strong>高级</strong><small>30 × 16</small></span
+            ><b>99 颗雷</b></label
+          ><label
+            ><input type="radio" name="level" value="custom" /><span
+              ><strong>自定义</strong><small>按你的节奏来</small></span
+            ></label
+          >
+        </div>
+        <fieldset id="custom-fields" disabled>
+          <legend>自定义棋盘</legend>
+          <label
+            >行数<input
+              id="rows"
+              type="number"
+              min="6"
+              max="40"
+              value="12"
+              required /></label
+          ><label
+            >列数<input
+              id="cols"
+              type="number"
+              min="6"
+              max="40"
+              value="12"
+              required /></label
+          ><label
+            >雷数<input
+              id="mines"
+              type="number"
+              min="1"
+              max="57"
+              value="24"
+              required
+          /></label>
+        </fieldset>
+        <p class="form-note" id="settings-note">
+          自定义边长 6–40 格，雷数最多占 40%。
+        </p>
+        <button class="primary full" type="submit">开始新一局</button>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <div class="dialog-heading">
+        <h2>开始新一局？</h2>
+        <button class="icon-button" data-close aria-label="关闭">×</button>
+      </div>
+      <p class="muted">当前棋盘将被替换。已经保存的最佳成绩会保留。</p>
+      <div class="dialog-actions">
+        <button class="secondary" data-close>继续本局</button
+        ><button class="primary" id="confirm-new">开始新一局</button>
+      </div>
+    </dialog>
+    <dialog id="result-dialog">
+      <div class="dialog-heading">
+        <span class="result-mark" id="result-mark">✳</span
+        ><button class="icon-button" data-close aria-label="关闭">×</button>
+      </div>
+      <p class="eyebrow" id="result-caption">这一局结束了</p>
+      <h2 class="result-title" id="result-title">安全着陆。</h2>
+      <p class="muted" id="result-description"></p>
+      <div class="result-stats">
+        <div><small>本局用时</small><strong id="result-time"></strong></div>
+        <div><small>安全格子</small><strong id="result-cleared"></strong></div>
+      </div>
+      <button class="primary full" id="play-again">再来一局</button
+      ><button class="text-button full" data-close>查看棋盘</button>
+    </dialog>
+    <dialog id="help-dialog">
+      <div class="dialog-heading">
+        <h2>玩法说明</h2>
+        <button class="icon-button" data-close aria-label="关闭">×</button>
+      </div>
+      <div class="help-copy">
+        <p>
+          打开所有没有雷的格子，就赢了。数字告诉你周围八个格子里藏着几颗雷。
+        </p>
+        <p>
+          <strong>轻点开格，长按插旗。</strong
+          >也可以切换到插旗模式，直接点按标记。电脑右键同样可以插旗。
+        </p>
+        <p>
+          <strong>点击数字连开：</strong
+          >数字周围的旗数与数字相同时，点击它会打开剩余邻格。旗插错了，连开也会踩雷。
+        </p>
+        <p>
+          <strong>大棋盘：</strong>拖动查看，双指缩放，或使用下方的 ＋ /
+          −。点击“适应”可以把整行棋盘放进屏幕。
+        </p>
+        <p>
+          第一次点击及其周围八格没有雷。后续棋盘是经典随机分布，可能需要猜测。
+        </p>
+        <p>
+          切到后台会暂停。进度与最佳成绩保存在当前浏览器；清除浏览器数据也会清除存档。
+        </p>
+        <p class="muted">
+          键盘：方向键移动，回车／空格开格，F
+          插旗。系统设置减少动态效果时，会减少动画。
+        </p>
+      </div>
+    </dialog>
+    <noscript>请在浏览器中开启 JavaScript，以运行扫雷。</noscript>
+  </body>
+</html>
