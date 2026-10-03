@@ -11,11 +11,11 @@
       name="description"
       content="一个安静的扫雷小游戏。首次点击安全，支持手机操作、本地存档和离线游玩。"
     />
-    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="assets/style.css" />
     <title>扫雷 · Minesweeper</title>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="src/app.js"></script>
   </head>
   <body>
     <main class="shell">
@@ -34,13 +34,13 @@
           <p><span class="guide-symbol">⚑</span>长按标记雷，轻点打开格子</p>
           <p><span class="guide-symbol">1</span>数字表示周围八格的雷数</p>
           <p><span class="guide-symbol">⊞</span>旗数对应数字后，点击数字连开</p>
-          <small>经典随机棋盘，部分局面需要猜测。</small>
+          <small id="mode-description">经典随机棋盘，部分局面需要猜测。</small>
         </div>
       </aside>
       <section class="console" aria-label="扫雷游戏">
         <header class="console-header">
           <div>
-            <p class="eyebrow">本局棋盘</p>
+            <p class="eyebrow">本局棋盘 <span class="game-mode" id="game-mode">经典随机</span></p>
             <button
               class="difficulty-button"
               id="difficulty"
@@ -87,6 +87,12 @@
             <h2>歇一会儿</h2>
             <p>棋盘已隐藏，计时已暂停。</p>
             <button class="primary" id="resume">继续本局</button>
+          </div>
+          <div class="generation-cover" id="generation-cover" hidden role="status">
+            <span class="generation-spinner" aria-hidden="true"></span>
+            <h2>正在准备棋盘</h2>
+            <p>为你找到一局可以靠线索解开的棋盘。</p>
+            <button class="secondary" id="cancel-generation">取消</button>
           </div>
         </div>
         <div class="board-tools">
@@ -137,6 +143,12 @@
           </button>
         </div>
         <p class="muted">选择难度，或设定自己的挑战。</p>
+        <fieldset class="game-mode-options">
+          <legend>玩法</legend>
+          <label><input type="radio" name="gameMode" value="classic" checked /><span>经典随机</span></label>
+          <label><input type="radio" name="gameMode" value="logic" /><span>无猜</span></label>
+        </fieldset>
+        <p class="form-note" id="settings-mode-note">经典随机支持所有难度，部分局面需要猜测。</p>
         <div class="preset-list">
           <label
             ><input type="radio" name="level" value="easy" checked /><span
@@ -215,6 +227,7 @@
         <button class="icon-button" data-close aria-label="关闭">×</button>
       </div>
       <div class="help-copy">
+        <p><strong>两种玩法：</strong>经典随机可能需要猜测；无猜模式的初级、中级棋盘经过验证，能够根据线索推理通关。无猜模式先打开第一格，再插旗。判断错误仍然可能踩雷。</p>
         <p>
           打开所有没有雷的格子，就赢了。数字告诉你周围八个格子里藏着几颗雷。
         </p>

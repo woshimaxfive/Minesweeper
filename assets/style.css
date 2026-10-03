@@ -471,7 +471,8 @@ button:active:not(:disabled) {
   color: var(--accent);
   padding: 0;
 }
-.pause-cover {
+.pause-cover,
+.generation-cover {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -488,11 +489,13 @@ button:active:not(:disabled) {
   font-size: 35px;
   color: var(--accent);
 }
-.pause-cover h2 {
+.pause-cover h2,
+.generation-cover h2 {
   font-size: 20px;
   margin: 10px;
 }
-.pause-cover p {
+.pause-cover p,
+.generation-cover p {
   font-size: 12px;
   color: var(--muted);
   margin: 0 0 20px;
@@ -601,6 +604,51 @@ fieldset input {
   color: var(--muted);
   line-height: 1.7;
   margin: 14px 0 20px;
+}
+.game-mode {
+  margin-left: 8px;
+  color: var(--accent);
+  letter-spacing: 0;
+}
+.game-mode-options {
+  gap: 8px;
+  margin-top: 20px;
+}
+.game-mode-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+}
+.game-mode-options input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+.game-mode-options label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--well);
+  color: var(--ink);
+}
+.preset-list label:has(input:disabled) {
+  opacity: 0.4;
+}
+.generation-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-spinner { animation: none; }
 }
 .primary,
 .secondary {

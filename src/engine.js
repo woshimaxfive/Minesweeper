@@ -17,10 +17,33 @@ export function validConfig(config) {
   );
 }
 
+export function supportsNoGuess(config) {
+  return [PRESETS.easy, PRESETS.medium].some((preset) =>
+    ["rows", "cols", "mines"].every((key) => preset[key] === config?.[key]),
+  );
+}
+
+export function neighbors(config, index) {
+  const { rows, cols } = config;
+  const row = Math.floor(index / cols), col = index % cols, result = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      if ((!dr && !dc) || row + dr < 0 || row + dr >= rows ||
+          col + dc < 0 || col + dc >= cols) continue;
+      result.push((row + dr) * cols + col + dc);
+    }
+  return result;
+}
+
 export class Game {
-  constructor(config = PRESETS.easy) {
+  constructor(config = PRESETS.easy, mode = "classic") {
     if (!validConfig(config)) throw new Error("棋盘参数无效");
+    if (!["classic", "logic"].includes(mode) ||
+        (mode === "logic" && !supportsNoGuess(config)))
+      throw new Error("无猜模式目前支持初级和中级");
     this.config = { rows: config.rows, cols: config.cols, mines: config.mines };
+    this.mode = mode;
+    this.opening = null;
     this.cells = Array.from({ length: config.rows * config.cols }, () => ({
       mine: false,
       count: 0,
@@ -33,25 +56,12 @@ export class Game {
     this.recorded = false;
   }
   neighbors(index) {
-    const { rows, cols } = this.config;
-    const row = Math.floor(index / cols),
-      col = index % cols,
-      result = [];
-    for (let dr = -1; dr <= 1; dr++)
-      for (let dc = -1; dc <= 1; dc++) {
-        if (
-          (!dr && !dc) ||
-          row + dr < 0 ||
-          row + dr >= rows ||
-          col + dc < 0 ||
-          col + dc >= cols
-        )
-          continue;
-        result.push((row + dr) * cols + col + dc);
-      }
-    return result;
+    return neighbors(this.config, index);
   }
   place(first, random = Math.random) {
+    if (!Number.isInteger(first) || !this.cells[first])
+      throw new Error("起点无效");
+    this.opening = first;
     const safe = new Set([first, ...this.neighbors(first)]);
     const candidates = this.cells.map((_, i) => i).filter((i) => !safe.has(i));
     for (let i = 0; i < this.config.mines; i++) {
@@ -73,7 +83,11 @@ export class Game {
       ["won", "lost"].includes(this.status)
     )
       return false;
-    if (this.status === "ready") this.place(index, random);
+    if (this.status === "ready") {
+      // Logic rounds are supplied by the verified generator, never random fallback.
+      if (this.mode === "logic") return false;
+      this.place(index, random);
+    }
     this.expand([index]);
     return true;
   }
@@ -99,6 +113,7 @@ export class Game {
     if (this.cells.every((cell) => cell.mine || cell.open)) this.status = "won";
   }
   flag(index) {
+    if (this.mode === "logic" && this.status === "ready") return false;
     const cell = this.cells[index];
     if (!cell || cell.open || ["won", "lost"].includes(this.status))
       return false;
@@ -129,6 +144,8 @@ export class Game {
   serialize() {
     return {
       version: 1,
+      mode: this.mode,
+      opening: this.opening,
       config: this.config,
       cells: this.cells,
       status: this.status,
@@ -139,7 +156,14 @@ export class Game {
   }
   static restore(data) {
     if (data?.version !== 1 || !validConfig(data.config)) return null;
-    const game = new Game(data.config);
+    const mode = data.mode ?? "classic";
+    if (!["classic", "logic"].includes(mode) ||
+        (mode === "logic" && !supportsNoGuess(data.config))) return null;
+    const opening = data.opening ?? null;
+    if (opening !== null && (!Number.isInteger(opening) || opening < 0 ||
+        opening >= data.config.rows * data.config.cols)) return null;
+    const game = new Game(data.config, mode);
+    game.opening = opening;
     if (
       !Array.isArray(data.cells) ||
       data.cells.length !== game.cells.length ||
@@ -178,6 +202,13 @@ export class Game {
     game.exploded = data.exploded;
     game.recorded = data.recorded;
     if (game.flags > game.config.mines) return null;
+    if (mode === "logic") {
+      if (game.status === "ready") {
+        if (opening !== null || game.flags) return null;
+      } else if (opening === null || !game.cells[opening].open ||
+          [opening, ...game.neighbors(opening)].some((i) => game.cells[i].mine))
+        return null;
+    }
     if (game.status === "ready") {
       if (
         game.cells.some((cell) => cell.mine || cell.open || cell.count) ||

@@ -1,5 +1,6 @@
-import { Game, PRESETS, validConfig } from "./engine.js";
+import { Game, PRESETS, validConfig, supportsNoGuess } from "./engine.js";
 import { RestartGuard } from "./restart-guard.js";
+import { startGeneration } from "./generation-client.js";
 
 const $ = (id) => document.getElementById(id);
 const KEY = "minesweeper:round:v1",
@@ -25,7 +26,8 @@ let autoFit = preferences.autoFit === true || !preferences.cellSize;
 let statistics = read(STATS) || {};
 if (typeof statistics !== "object" || Array.isArray(statistics))
   statistics = {};
-let game = Game.restore(read(KEY)) || new Game(PRESETS.easy);
+let game = Game.restore(read(KEY)) || new Game(PRESETS.easy,
+  preferences.gameMode === "logic" ? "logic" : "classic");
 let flagMode = preferences.flagMode === true;
 let cellSize = Number.isFinite(preferences.cellSize)
   ? Math.max(20, Math.min(60, preferences.cellSize))
@@ -41,6 +43,7 @@ let modalWasPlaying = false,
 const pointers = new Map();
 const activeInputs = new Set();
 let roundAction = null;
+let generation = null;
 const board = $("board"),
   viewport = $("viewport");
 let dark = preferences.theme
@@ -59,7 +62,8 @@ function formatTime(ms) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 function statsKey() {
-  return `${game.config.rows}x${game.config.cols}:${game.config.mines}`;
+  const key = `${game.config.rows}x${game.config.cols}:${game.config.mines}`;
+  return game.mode === "logic" ? `${key}:logic` : key;
 }
 function syncClock() {
   const now = performance.now();
@@ -71,7 +75,7 @@ function save() {
   write(KEY, game.serialize());
 }
 function savePreferences() {
-  write(PREFS, { theme: dark ? "dark" : "light", flagMode, cellSize, autoFit });
+  write(PREFS, { theme: dark ? "dark" : "light", flagMode, cellSize, autoFit, gameMode: game.mode });
 }
 function theme() {
   document.documentElement.classList.toggle("dark", dark);
@@ -87,6 +91,7 @@ function modes() {
   $("flag-mode").setAttribute("aria-pressed", String(flagMode));
 }
 function defaultStatus() {
+  if (generation) return "正在生成可推理通关的棋盘…";
   if (game.status === "won") return "所有安全格子都找到了。做得好！";
   if (game.status === "lost") return "这一格有雷。可以查看棋盘，或再来一局。";
   if (paused) return "本局已暂停。";
@@ -158,6 +163,10 @@ function render() {
   $("board-spec").textContent =
     `${game.config.cols} × ${game.config.rows} · ${game.config.mines} 颗雷`;
   $("difficulty-name").textContent = configName(game.config);
+  $("game-mode").textContent = game.mode === "logic" ? "无猜" : "经典随机";
+  $("mode-description").textContent = game.mode === "logic"
+    ? "无猜棋盘，每一步都有可推理的线索。"
+    : "经典随机棋盘，部分局面需要猜测。";
   setStatus();
   best();
 }
@@ -261,6 +270,7 @@ function showResult() {
 }
 function act(index, action) {
   if (
+    generation ||
     paused ||
     document.hidden ||
     document.querySelector("dialog[open]") ||
@@ -271,10 +281,17 @@ function act(index, action) {
   const before = game.status;
   let changed = false;
   if (action === "flag") {
+    if (game.mode === "logic" && game.status === "ready") {
+      setStatus("先打开第一格，再标记雷。");
+      return;
+    }
     const limited = !game.cells[index]?.flag && game.flags >= game.config.mines;
     changed = game.flag(index);
     if (limited && !changed && !["won", "lost"].includes(game.status))
       setStatus("旗帜已用完；先取消一面旗，再标记新的位置。");
+  } else if (game.mode === "logic" && game.status === "ready" && game.cells[index]) {
+    beginGeneration(index);
+    return;
   } else if (game.cells[index]?.open) changed = game.chord(index);
   else changed = game.reveal(index);
   if (!changed) return;
@@ -285,6 +302,7 @@ function act(index, action) {
     showResult();
 }
 function showDialog(id) {
+  if (generation) cancelGeneration();
   syncClock();
   if (game.status === "playing" && !paused) {
     modalWasPlaying = true;
@@ -365,8 +383,55 @@ document.addEventListener(
 window.addEventListener("blur", () => {
   for (const input of activeInputs) trackInput(input, false);
 });
-function newGame(config) {
-  game = new Game(config);
+function generationView(busy) {
+  $("generation-cover").hidden = !busy;
+  board.inert = busy || paused;
+  board.setAttribute("aria-busy", String(busy));
+  $("pause").disabled = busy || game.status !== "playing";
+}
+function cancelGeneration() {
+  if (!generation) return;
+  const job = generation;
+  generation = null;
+  job.cancel();
+  generationView(false);
+  setStatus();
+}
+async function beginGeneration(first) {
+  const original = game;
+  const job = startGeneration(game.config, first);
+  generation = job;
+  generationView(true);
+  setStatus();
+  try {
+    const round = await job.promise;
+    if (generation !== job || game !== original) return;
+    const next = Game.restore(round);
+    if (!next || next.mode !== "logic" || next.opening !== first ||
+        !["playing", "won"].includes(next.status) ||
+        !["rows", "cols", "mines"].every((key) => next.config[key] === original.config[key]))
+      throw new Error("生成结果无效，请重新打开第一格。");
+    game = next;
+    generation = null;
+    tickAt = performance.now();
+    generationView(false);
+    render();
+    save();
+    if (document.hidden) setPause(true);
+    else if (game.status === "won") showResult();
+  } catch (error) {
+    if (generation !== job) return;
+    generation = null;
+    generationView(false);
+    setStatus(error.message);
+  }
+}
+$("cancel-generation").addEventListener("click", cancelGeneration);
+
+function newGame(config, mode = game.mode) {
+  cancelGeneration();
+  clearGestures();
+  game = new Game(config, mode);
   paused = false;
   tickAt = performance.now();
   $("timer").textContent = "00:00";
@@ -443,15 +508,31 @@ function customLimit() {
   $(id).addEventListener("input", customLimit),
 );
 $("settings-form").addEventListener("change", () => {
+  updateSettingsMode();
   $("custom-fields").disabled =
     $("settings-form").elements.level.value !== "custom";
 });
+function updateSettingsMode() {
+  const form = $("settings-form");
+  const logic = form.elements.gameMode.value === "logic";
+  ["hard", "custom"].forEach((level) => {
+    form.querySelector(`[name="level"][value="${level}"]`).disabled = logic;
+  });
+  if (logic && !["easy", "medium"].includes(form.elements.level.value))
+    form.elements.level.value = "medium";
+  $("custom-fields").disabled = form.elements.level.value !== "custom";
+  $("settings-mode-note").textContent = logic
+    ? "无猜模式目前支持初级和中级，棋盘可全程推理通关。"
+    : "经典随机支持所有难度，部分局面需要猜测。";
+}
 $("difficulty").addEventListener("click", () => {
   const level =
     Object.keys(PRESETS).find(
       (key) => PRESETS[key].name === configName(game.config),
     ) || "custom";
   $("settings-form").elements.level.value = level;
+  $("settings-form").elements.gameMode.value = game.mode;
+  updateSettingsMode();
   $("custom-fields").disabled = level !== "custom";
   $("rows").value = game.config.rows;
   $("cols").value = game.config.cols;
@@ -462,6 +543,7 @@ $("difficulty").addEventListener("click", () => {
 $("settings-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const level = event.currentTarget.elements.level.value;
+  const mode = event.currentTarget.elements.gameMode.value;
   const config =
     level === "custom"
       ? {
@@ -470,13 +552,13 @@ $("settings-form").addEventListener("submit", (event) => {
           mines: Number($("mines").value),
         }
       : PRESETS[level];
-  if (!validConfig(config)) {
+  if (!validConfig(config) || (mode === "logic" && !supportsNoGuess(config))) {
     $("settings-note").textContent =
       "请检查参数：边长 6–40 格，雷数 1 至格子总数的 40%。";
     return;
   }
   $("settings-dialog").close();
-  newGame(config);
+  newGame(config, mode);
 });
 
 // All gestures end on release. Moving or adding another finger cancels a tap.
@@ -620,6 +702,7 @@ board.addEventListener("keydown", (event) => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    cancelGeneration();
     clearGestures();
     if (game.status === "playing") setPause(true);
     else save();
@@ -627,6 +710,7 @@ document.addEventListener("visibilitychange", () => {
   tickAt = performance.now();
 });
 window.addEventListener("pagehide", () => {
+  cancelGeneration();
   syncClock();
   save();
 });
@@ -654,7 +738,7 @@ window.addEventListener("appinstalled", () => {
 });
 if ("serviceWorker" in navigator && window.isSecureContext) {
   navigator.serviceWorker
-    .register("./sw.js")
+    .register("./sw.js", { updateViaCache: "none" })
     .then(() => navigator.serviceWorker.ready)
     .then(async () => {
       if (await caches.match(new URL("./index.html", location.href)))
