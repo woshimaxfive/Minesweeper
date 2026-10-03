@@ -33,8 +33,7 @@ let cellSize = Number.isFinite(preferences.cellSize)
 let paused = false,
   tickAt = performance.now(),
   buttons = [],
-  focusIndex = 0,
-  pendingConfig = null;
+  focusIndex = 0;
 let modalWasPlaying = false,
   pendingInstall = null,
   moving = false,
@@ -294,7 +293,6 @@ function showDialog(id) {
   $(id).showModal();
   const actions = {
     "result-dialog": ["play-again", "result-restart-hint"],
-    "confirm-dialog": ["confirm-new", "confirm-restart-hint"],
   };
   if (actions[id]) {
     if (roundAction) clearTimeout(roundAction.timer);
@@ -315,9 +313,7 @@ function updateRoundAction() {
   const ready = roundAction.guard.ready();
   roundAction.button.setAttribute("aria-disabled", String(!ready));
   roundAction.hint.textContent = ready
-    ? roundAction.dialog.id === "result-dialog"
-      ? "再来一局前会再次确认。"
-      : "确认后开始一张新棋盘。"
+    ? "点击再来一局，开始一张新棋盘。"
     : "先松开手指，稍等一下再开始。";
   if (!ready && roundAction.guard.active.size === 0)
     roundAction.timer = setTimeout(
@@ -385,13 +381,6 @@ function newGame(config) {
   savePreferences();
   save();
 }
-function requestNew(config) {
-  if (game.status !== "ready" || game.flags) {
-    pendingConfig = config;
-    showDialog("confirm-dialog");
-  } else newGame(config);
-}
-
 document
   .querySelectorAll("[data-close]")
   .forEach((button) =>
@@ -428,18 +417,11 @@ $("flag-mode").addEventListener("click", () => {
   savePreferences();
   setStatus();
 });
-$("restart").addEventListener("click", () => requestNew(game.config));
+$("restart").addEventListener("click", () => newGame(game.config));
 $("play-again").addEventListener("click", () => {
   if (!roundActionAllowed("result-dialog")) return;
   $("result-dialog").close();
-  requestNew(game.config);
-});
-$("confirm-new").addEventListener("click", () => {
-  if (!roundActionAllowed("confirm-dialog") || !pendingConfig) return;
-  $("confirm-dialog").close();
-  const config = pendingConfig;
-  pendingConfig = null;
-  newGame(config);
+  newGame(game.config);
 });
 $("pause").addEventListener("click", () => setPause(!paused));
 $("resume").addEventListener("click", () => {
@@ -494,7 +476,7 @@ $("settings-form").addEventListener("submit", (event) => {
     return;
   }
   $("settings-dialog").close();
-  requestNew(config);
+  newGame(config);
 });
 
 // All gestures end on release. Moving or adding another finger cancels a tap.

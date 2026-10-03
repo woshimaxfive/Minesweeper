@@ -40,8 +40,7 @@ button:disabled {
   opacity: 0.35;
   cursor: default;
 }
-#play-again[aria-disabled="true"],
-#confirm-new[aria-disabled="true"] {
+#play-again[aria-disabled="true"] {
   opacity: 0.4;
   cursor: default;
 }
