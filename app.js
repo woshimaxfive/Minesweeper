@@ -1,4 +1,5 @@
 import { Game, PRESETS, validConfig } from "./engine.js";
+import { RestartGuard } from "./restart-guard.js";
 
 const $ = (id) => document.getElementById(id);
 const KEY = "minesweeper:round:v1",
@@ -39,6 +40,8 @@ let modalWasPlaying = false,
   moving = false,
   pinch = null;
 const pointers = new Map();
+const activeInputs = new Set();
+let roundAction = null;
 const board = $("board"),
   viewport = $("viewport");
 let dark = preferences.theme
@@ -289,7 +292,83 @@ function showDialog(id) {
     setPause(true);
   }
   $(id).showModal();
+  const actions = {
+    "result-dialog": ["play-again", "result-restart-hint"],
+    "confirm-dialog": ["confirm-new", "confirm-restart-hint"],
+  };
+  if (actions[id]) {
+    if (roundAction) clearTimeout(roundAction.timer);
+    const [button, hint] = actions[id];
+    roundAction = {
+      dialog: $(id),
+      button: $(button),
+      hint: $(hint),
+      guard: new RestartGuard(activeInputs),
+      timer: null,
+    };
+    updateRoundAction();
+  }
 }
+function updateRoundAction() {
+  if (!roundAction) return;
+  clearTimeout(roundAction.timer);
+  const ready = roundAction.guard.ready();
+  roundAction.button.setAttribute("aria-disabled", String(!ready));
+  roundAction.hint.textContent = ready
+    ? roundAction.dialog.id === "result-dialog"
+      ? "再来一局前会再次确认。"
+      : "确认后开始一张新棋盘。"
+    : "先松开手指，稍等一下再开始。";
+  if (!ready && roundAction.guard.active.size === 0)
+    roundAction.timer = setTimeout(
+      updateRoundAction,
+      Math.max(0, roundAction.guard.until - performance.now()),
+    );
+}
+function roundActionAllowed(id) {
+  return (
+    roundAction?.dialog.id === id &&
+    roundAction.dialog.open &&
+    roundAction.guard.ready()
+  );
+}
+// Capture input before board actions can open a dialog, including held keys.
+function trackInput(input, pressed) {
+  if (pressed) activeInputs.add(input);
+  else activeInputs.delete(input);
+  if (!roundAction?.dialog.open) return;
+  if (pressed) roundAction.guard.press(input);
+  else roundAction.guard.release(input);
+  updateRoundAction();
+}
+document.addEventListener(
+  "pointerdown",
+  (event) => trackInput(`pointer:${event.pointerId}`, true),
+  true,
+);
+document.addEventListener(
+  "pointerup",
+  (event) => trackInput(`pointer:${event.pointerId}`, false),
+  true,
+);
+document.addEventListener(
+  "pointercancel",
+  (event) => trackInput(`pointer:${event.pointerId}`, false),
+  true,
+);
+document.addEventListener(
+  "keydown",
+  (event) => trackInput(`key:${event.code}`, true),
+  true,
+);
+document.addEventListener(
+  "keyup",
+  (event) => trackInput(`key:${event.code}`, false),
+  true,
+);
+window.addEventListener("blur", () => {
+  for (const input of activeInputs) trackInput(input, false);
+});
 function newGame(config) {
   game = new Game(config);
   paused = false;
@@ -307,7 +386,7 @@ function newGame(config) {
   save();
 }
 function requestNew(config) {
-  if (game.status === "playing" || (game.status === "ready" && game.flags)) {
+  if (game.status !== "ready" || game.flags) {
     pendingConfig = config;
     showDialog("confirm-dialog");
   } else newGame(config);
@@ -320,6 +399,10 @@ document
   );
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", () => {
+    if (roundAction?.dialog === dialog) {
+      clearTimeout(roundAction.timer);
+      roundAction = null;
+    }
     if (document.querySelector("dialog[open]")) return;
     if (modalWasPlaying) {
       modalWasPlaying = false;
@@ -347,10 +430,12 @@ $("flag-mode").addEventListener("click", () => {
 });
 $("restart").addEventListener("click", () => requestNew(game.config));
 $("play-again").addEventListener("click", () => {
+  if (!roundActionAllowed("result-dialog")) return;
   $("result-dialog").close();
-  newGame(game.config);
+  requestNew(game.config);
 });
 $("confirm-new").addEventListener("click", () => {
+  if (!roundActionAllowed("confirm-dialog") || !pendingConfig) return;
   $("confirm-dialog").close();
   const config = pendingConfig;
   pendingConfig = null;

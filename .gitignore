@@ -6,6 +6,7 @@
 !/style.css
 !/app.js
 !/engine.js
+!/restart-guard.js
 !/sw.js
 !/manifest.webmanifest
 !/icon.svg

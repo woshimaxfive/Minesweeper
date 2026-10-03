@@ -196,9 +196,14 @@
         <button class="icon-button" data-close aria-label="关闭">×</button>
       </div>
       <p class="muted">当前棋盘将被替换。已经保存的最佳成绩会保留。</p>
+      <p class="restart-hint" id="confirm-restart-hint" role="status">
+        先松开手指，稍等一下再开始。
+      </p>
       <div class="dialog-actions">
         <button class="secondary" data-close>继续本局</button
-        ><button class="primary" id="confirm-new">开始新一局</button>
+        ><button class="primary" id="confirm-new" aria-disabled="true">
+          开始新一局
+        </button>
       </div>
     </dialog>
     <dialog id="result-dialog">
@@ -213,7 +218,11 @@
         <div><small>本局用时</small><strong id="result-time"></strong></div>
         <div><small>安全格子</small><strong id="result-cleared"></strong></div>
       </div>
-      <button class="primary full" id="play-again">再来一局</button
+      <p class="restart-hint" id="result-restart-hint" role="status">
+        先松开手指，稍等一下再开始。
+      </p>
+      <button class="primary full" id="play-again" aria-disabled="true">
+        再来一局</button
       ><button class="text-button full" data-close>查看棋盘</button>
     </dialog>
     <dialog id="help-dialog">

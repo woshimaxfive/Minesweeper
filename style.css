@@ -40,6 +40,18 @@ button:disabled {
   opacity: 0.35;
   cursor: default;
 }
+#play-again[aria-disabled="true"],
+#confirm-new[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.restart-hint {
+  min-height: 18px;
+  margin: 0 0 12px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--muted);
+}
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
