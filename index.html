@@ -50,14 +50,18 @@
               ><span class="chevron">⌄</span></button
             ><span class="board-spec" id="board-spec">9 × 9 · 10 颗雷</span>
           </div>
-          <button
-            class="icon-button"
-            id="theme"
-            aria-label="切换深色主题"
-            title="切换主题"
-          >
-            ◐
-          </button>
+          <div class="console-actions">
+            <button id="landscape-board" class="view-button" aria-label="横屏棋盘" aria-pressed="false" hidden>横屏</button>
+            <button id="expand-board" class="icon-button" aria-label="棋盘全屏" aria-pressed="false" title="棋盘全屏">⛶</button>
+            <button
+              class="icon-button"
+              id="theme"
+              aria-label="切换深色主题"
+              title="切换主题"
+            >
+              ◐
+            </button>
+          </div>
         </header>
         <div class="scoreboard">
           <div class="metric">
@@ -99,7 +103,7 @@
           <span id="progress">已打开 0 / 71</span>
           <div class="zoom-controls">
             <button id="zoom-out" aria-label="缩小格子">−</button
-            ><button id="fit" title="适应棋盘宽度">适应</button
+            ><button id="fit" title="适应当前空间">适应</button
             ><button id="zoom-in" aria-label="放大格子">＋</button>
           </div>
         </div>
@@ -227,6 +231,7 @@
         <button class="icon-button" data-close aria-label="关闭">×</button>
       </div>
       <div class="help-copy">
+        <p><strong>全屏与横屏：</strong>点击右上角 ⛶ 放大棋盘，再点“横屏”或横握手机。大棋盘可以拖动和双指缩放；“适应”会按当前空间调整格子。点击 × 退出全屏，棋盘进度保留。</p>
         <p><strong>两种玩法：</strong>经典随机可能需要猜测；无猜模式的初级、中级棋盘经过验证，能够根据线索推理通关。无猜模式先打开第一格，再插旗。判断错误仍然可能踩雷。</p>
         <p>
           打开所有没有雷的格子，就赢了。数字告诉你周围八个格子里藏着几颗雷。

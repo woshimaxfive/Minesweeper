@@ -8,6 +8,7 @@
 !/src/
 /src/*
 !/src/app.js
+!/src/board-view.js
 !/src/engine.js
 !/src/restart-guard.js
 !/src/solver.js

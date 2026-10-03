@@ -1,6 +1,7 @@
 import { Game, PRESETS, validConfig, supportsNoGuess } from "./engine.js";
 import { RestartGuard } from "./restart-guard.js";
 import { startGeneration } from "./generation-client.js";
+import { mountBoardView, fittedCellSize, boardDrag } from "./board-view.js";
 
 const $ = (id) => document.getElementById(id);
 const KEY = "minesweeper:round:v1",
@@ -44,6 +45,7 @@ const pointers = new Map();
 const activeInputs = new Set();
 let roundAction = null;
 let generation = null;
+let boardView = null, regularSizing = null, viewFitMinimum = 28;
 const board = $("board"),
   viewport = $("viewport");
 let dark = preferences.theme
@@ -75,7 +77,9 @@ function save() {
   write(KEY, game.serialize());
 }
 function savePreferences() {
-  write(PREFS, { theme: dark ? "dark" : "light", flagMode, cellSize, autoFit, gameMode: game.mode });
+  const sizing = regularSizing || { cellSize, autoFit };
+  write(PREFS, { theme: dark ? "dark" : "light", flagMode,
+    cellSize: sizing.cellSize, autoFit: sizing.autoFit, gameMode: game.mode });
 }
 function theme() {
   document.documentElement.classList.toggle("dark", dark);
@@ -209,6 +213,12 @@ function resizeCells(size, persist = true) {
   }
 }
 function fit() {
+  if (boardView?.active) {
+    viewFitMinimum = 20;
+    autoFit = true;
+    initialFit();
+    return;
+  }
   resizeCells(
     Math.floor(
       (viewport.clientWidth - (game.config.cols - 1) * 3) / game.config.cols,
@@ -216,6 +226,11 @@ function fit() {
   );
 }
 function initialFit() {
+  if (boardView?.active) {
+    resizeCells(fittedCellSize(game.config, viewport.clientWidth,
+      viewport.clientHeight, viewFitMinimum), false);
+    return;
+  }
   if (game.config.cols === 9)
     resizeCells(
       Math.min(44, Math.floor((viewport.clientWidth - 24) / 9)),
@@ -441,6 +456,12 @@ function newGame(config, mode = game.mode) {
   $("pause").setAttribute("aria-label", "暂停游戏");
   modalWasPlaying = false;
   autoFit = game.config.cols === 9;
+  if (boardView?.active) {
+    regularSizing = { cellSize: 38, autoFit,
+      scrollX: 0, scrollY: 0 };
+    autoFit = true;
+    viewFitMinimum = 28;
+  }
   buildBoard();
   initialFit();
   savePreferences();
@@ -601,6 +622,7 @@ viewport.addEventListener("pointerdown", (event) => {
       p.moved = true;
     });
     moving = true;
+    autoFit = false;
     const [a, b] = [...pointers.values()];
     pinch = { distance: distance(a, b), size: cellSize };
   }
@@ -624,8 +646,9 @@ viewport.addEventListener("pointermove", (event) => {
     clearTimeout(pointer.hold);
   }
   if (pointer.moved && !pointer.held) {
-    viewport.scrollLeft = pointer.scrollX - dx;
-    viewport.scrollTop = pointer.scrollY - dy;
+    const delta = boardDrag(dx, dy, boardView?.rotated);
+    viewport.scrollLeft = pointer.scrollX - delta.x;
+    viewport.scrollTop = pointer.scrollY - delta.y;
   }
 });
 viewport.addEventListener("pointerup", (event) => {
@@ -750,6 +773,31 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
       $("offline-state").textContent = "离线缓存未完成，请联网游玩";
     });
 }
+boardView = mountBoardView({
+  onChange({ active }) {
+    clearGestures();
+    if (active && !regularSizing) {
+      regularSizing = { cellSize, autoFit,
+        scrollX: viewport.scrollLeft, scrollY: viewport.scrollTop };
+      autoFit = true;
+      viewFitMinimum = 28;
+    } else if (!active && regularSizing) {
+      const sizing = regularSizing;
+      regularSizing = null;
+      autoFit = sizing.autoFit;
+      resizeCells(sizing.cellSize, false);
+      requestAnimationFrame(() => {
+        viewport.scrollTo(sizing.scrollX, sizing.scrollY);
+      });
+      savePreferences();
+    }
+    requestAnimationFrame(() => { if (autoFit) initialFit(); });
+    setStatus();
+  },
+  onStatus(message) {
+    if (!paused && !generation) setStatus(message);
+  },
+});
 theme();
 modes();
 buildBoard();
