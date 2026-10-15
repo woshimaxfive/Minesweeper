@@ -51,7 +51,7 @@
             <div><h2 id="result-title">通关</h2><p id="result-description"></p></div>
             <div class="result-stats"><span><small>用时</small><strong id="result-time"></strong></span><span><small>已打开</small><strong id="result-cleared"></strong></span></div>
           </div>
-          <div class="result-actions"><button class="secondary" id="review-board">查看棋盘</button><button class="primary" id="play-again" aria-disabled="true">再来一局</button></div>
+          <div class="result-actions"><button class="secondary" id="review-board">查看棋盘</button><button class="secondary" id="result-statistics" aria-haspopup="dialog">战绩</button><button class="primary" id="play-again" aria-disabled="true">再来一局</button></div>
           <p class="sr-only" id="result-restart-hint" role="status"></p>
         </section>
         <div class="board-tools">
@@ -77,11 +77,28 @@
       <div class="dialog-heading"><h2 id="preferences-title">设置</h2><button class="icon-button" data-close aria-label="关闭"><span data-icon="close"></span></button></div>
       <div class="settings-list">
         <button id="theme" class="settings-row" aria-label="深色模式" aria-pressed="false"><span id="theme-icon" data-icon="moon"></span><span>深色模式</span><span class="switch" aria-hidden="true"></span></button>
+        <button id="statistics" class="settings-row" aria-haspopup="dialog"><span data-icon="statistics"></span><span>战绩</span><span class="row-arrow" data-icon="chevron"></span></button>
         <button id="help" class="settings-row" aria-haspopup="dialog"><span data-icon="help"></span><span>玩法说明</span><span class="row-arrow" data-icon="chevron"></span></button>
         <button id="install" class="settings-row" hidden><span data-icon="install"></span><span>添加到桌面</span><span class="row-arrow" data-icon="chevron"></span></button>
       </div>
       <div class="saved-info"><span id="best">最佳用时 —</span><p id="mode-description">经典随机可能需要猜测。</p><p id="offline-state">进度保存在本机</p></div>
       <button class="secondary full restart" id="restart"><span data-icon="restart"></span>重新开始本局</button>
+    </dialog>
+    <dialog id="statistics-dialog" aria-labelledby="statistics-title">
+      <div class="dialog-heading"><h2 id="statistics-title">战绩</h2><button class="icon-button" data-close aria-label="关闭"><span data-icon="close"></span></button></div>
+      <div class="mode-switch statistics-modes" role="group" aria-label="统计玩法">
+        <button data-statistics-mode="classic" aria-pressed="true">经典随机</button><button data-statistics-mode="logic" aria-pressed="false">无猜</button>
+      </div>
+      <label class="statistics-filter" for="statistics-config">难度<select id="statistics-config"></select></label>
+      <dl class="statistics-summary" aria-label="累计成绩" aria-live="polite">
+        <div><dt>已完成</dt><dd id="statistics-played">0</dd></div><div><dt>通关</dt><dd id="statistics-wins">0</dd></div>
+        <div><dt>胜率</dt><dd id="statistics-rate">—</dd></div><div><dt>最佳用时</dt><dd id="statistics-best">—</dd></div>
+      </dl>
+      <div class="history-heading"><h3>最近对局</h3><span>最多保留 50 局</span></div>
+      <ol id="statistics-history" class="statistics-history" aria-label="最近对局" aria-live="polite" tabindex="0"></ol>
+      <p id="statistics-empty" class="statistics-empty">完成一局后，这里会留下记录。</p>
+      <p id="statistics-history-note" class="statistics-note" hidden>较早的对局仅保留累计成绩。</p>
+      <p id="statistics-storage-note" class="statistics-note">只统计通关和踩雷的对局，中途重开不计入。成绩保存在当前浏览器。</p>
     </dialog>
     <dialog id="settings-dialog" aria-labelledby="settings-title">
       <form id="settings-form">

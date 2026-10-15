@@ -21,6 +21,7 @@ const paths = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 2-2.5 2-2.5 4M12 17h.01"/>',
   install: '<path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
+  statistics: '<path d="M4 20h16M7 16v-5m5 5V4m5 12V8"/>',
 };
 
 export function icon(name) {

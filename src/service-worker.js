@@ -1,4 +1,4 @@
-const CACHE = "minesweeper-v10";
+const CACHE = "minesweeper-v11";
 const PREFIX = "minesweeper-";
 const ASSETS = [
   "./",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./src/app.js",
   "./src/board-view.js",
   "./src/icons.js",
+  "./src/statistics.js",
   "./src/engine.js",
   "./src/restart-guard.js",
   "./src/solver.js",

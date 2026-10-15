@@ -3,6 +3,7 @@ import { RestartGuard } from "./restart-guard.js";
 import { startGeneration } from "./generation-client.js";
 import { mountBoardView, fittedCellSize, boardDrag, CELL_GAP } from "./board-view.js";
 import { icon } from "./icons.js";
+import { restoreStatistics, recordStatistics, statisticsKey, statisticsConfig } from "./statistics.js";
 
 const $ = (id) => document.getElementById(id);
 document.querySelectorAll("[data-icon]").forEach((element) => {
@@ -22,17 +23,23 @@ function read(key) {
 function write(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
     storageAvailable = false;
+    return false;
   }
 }
 const preferences = read(PREFS) || {};
 let autoFit = preferences.autoFit === true || !preferences.cellSize;
-let statistics = read(STATS) || {};
-if (typeof statistics !== "object" || Array.isArray(statistics))
-  statistics = {};
-let game = Game.restore(read(KEY)) || new Game(PRESETS.easy,
+let statistics = restoreStatistics(read(STATS));
+const savedRound = read(KEY);
+const restoredRound = Game.restore(savedRound);
+let game = restoredRound || new Game(PRESETS.easy,
   preferences.gameMode === "logic" ? "logic" : "classic");
+const newRoundId = () => crypto.getRandomValues(new Uint32Array(4)).join("-");
+let roundId = restoredRound && typeof savedRound?.id === "string" && savedRound.id.length > 0 && savedRound.id.length <= 100
+  ? savedRound.id : newRoundId();
+let statisticsMode = game.mode;
 let flagMode = preferences.flagMode === true;
 let cellSize = Number.isFinite(preferences.cellSize)
   ? Math.max(20, Math.min(60, preferences.cellSize))
@@ -68,10 +75,6 @@ function formatTime(ms) {
   const seconds = Math.floor(ms / 1000);
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
-function statsKey() {
-  const key = `${game.config.rows}x${game.config.cols}:${game.config.mines}`;
-  return game.mode === "logic" ? `${key}:logic` : key;
-}
 function syncClock() {
   const now = performance.now();
   if (game.status === "playing" && !paused) game.elapsed += now - tickAt;
@@ -79,7 +82,7 @@ function syncClock() {
   $("timer").textContent = formatTime(game.elapsed);
 }
 function save() {
-  write(KEY, game.serialize());
+  write(KEY, { ...game.serialize(), id: roundId });
 }
 function savePreferences() {
   const sizing = regularSizing || { cellSize, autoFit };
@@ -110,7 +113,7 @@ function setStatus(message = defaultStatus(), urgent = false) {
   $("status").classList.toggle("attention", urgent);
 }
 function best() {
-  const entry = statistics[statsKey()];
+  const entry = statistics[statisticsKey(game.config, game.mode)];
   $("best").textContent = Number.isFinite(entry?.best)
     ? `最佳用时 ${formatTime(entry.best)}`
     : "最佳用时 —";
@@ -266,33 +269,23 @@ function setPause(value) {
   save();
 }
 function recordResult() {
-  if (game.recorded) return;
-  const entry = statistics[statsKey()] || {};
-  statistics[statsKey()] = {
-    played: (Number.isFinite(entry.played) ? entry.played : 0) + 1,
-    wins:
-      (Number.isFinite(entry.wins) ? entry.wins : 0) +
-      (game.status === "won" ? 1 : 0),
-    best:
-      game.status === "won"
-        ? Math.min(
-            Number.isFinite(entry.best) ? entry.best : Infinity,
-            game.elapsed,
-          )
-        : (entry.best ?? null),
-  };
-  game.recorded = true;
-  write(STATS, statistics);
-  save();
+  if (!game.recorded) {
+    statistics = recordStatistics(statistics, game, roundId);
+    if (write(STATS, statistics)) {
+      game.recorded = true;
+      save();
+    }
+  }
   best();
+  return statistics.recent.find((record) => record.id === roundId);
 }
 function showResult() {
-  recordResult();
+  const record = recordResult();
   const won = game.status === "won";
   $("result-mark").innerHTML = icon(won ? "check" : "mine");
-  $("result-title").textContent = won ? "通关" : "踩雷了";
+  $("result-title").textContent = won ? record?.newBest ? "通关 · 新纪录" : "通关" : "踩雷了";
   $("result-description").textContent = won
-    ? "安全格已全部打开"
+    ? record?.newBest ? "刷新了这项棋盘的最佳用时" : "安全格已全部打开"
     : "可以查看棋盘复盘";
   $("result-time").textContent = formatTime(game.elapsed);
   $("result-cleared").textContent =
@@ -460,6 +453,7 @@ function newGame(config, mode = game.mode) {
   $("result-panel").hidden = true;
   viewAnchor = null;
   game = new Game(config, mode);
+  roundId = newRoundId();
   paused = false;
   tickAt = performance.now();
   $("timer").textContent = "00:00";
@@ -533,6 +527,94 @@ $("resume").addEventListener("click", () => {
   buttons[focusIndex]?.focus({ preventScroll: true });
 });
 $("preferences").addEventListener("click", () => showDialog("preferences-dialog"));
+function renderStatistics() {
+  const key = $("statistics-config").value;
+  const entry = statistics[key] || { played: 0, wins: 0, best: null };
+  $("statistics-played").textContent = entry.played;
+  $("statistics-wins").textContent = entry.wins;
+  $("statistics-rate").textContent = entry.played
+    ? `${Number((entry.wins / entry.played * 100).toFixed(1))}%` : "—";
+  $("statistics-best").textContent = entry.best === null ? "—" : formatTime(entry.best);
+  document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
+    const selected = button.dataset.statisticsMode === statisticsMode;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  const records = statistics.recent.filter((record) => record.key === key);
+  const fragment = document.createDocumentFragment();
+  const dateFormat = new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  for (const record of records) {
+    const row = document.createElement("li");
+    const result = document.createElement("span");
+    result.className = `history-result ${record.status}`;
+    result.innerHTML = icon(record.status === "won" ? "check" : "mine");
+    result.append(record.status === "won" ? "通关" : "踩雷");
+    if (record.newBest) {
+      const label = document.createElement("span");
+      label.className = "history-record";
+      label.textContent = "新纪录";
+      result.append(label);
+    }
+    const detail = document.createElement("span");
+    detail.className = "history-detail";
+    const duration = document.createElement("strong");
+    duration.textContent = formatTime(record.elapsed);
+    const date = document.createElement("time");
+    date.dateTime = new Date(record.finishedAt).toISOString();
+    date.textContent = dateFormat.format(record.finishedAt);
+    detail.append(duration, date);
+    row.append(result, detail);
+    fragment.append(row);
+  }
+  $("statistics-history").replaceChildren(fragment);
+  $("statistics-empty").hidden = records.length > 0;
+  $("statistics-empty").textContent = entry.played
+    ? "还没有逐局记录。" : "完成一局后，这里会留下记录。";
+  $("statistics-history-note").hidden = entry.played <= records.length;
+  $("statistics-storage-note").textContent = storageAvailable
+    ? "只统计通关和踩雷的对局，中途重开不计入。成绩保存在当前浏览器。"
+    : "当前浏览器无法保存成绩，关闭页面后本次成绩可能丢失。";
+}
+function statisticsChoices(config = game.config) {
+  const choices = new Map();
+  const add = (config) => {
+    if (statisticsMode === "logic" && !supportsNoGuess(config)) return;
+    choices.set(statisticsKey(config, statisticsMode), config);
+  };
+  Object.values(PRESETS).forEach(add);
+  Object.keys(statistics).forEach((key) => {
+    const entry = statisticsConfig(key);
+    if (entry?.mode === statisticsMode) add(entry.config);
+  });
+  add(config);
+  const options = Array.from(choices, ([key, config]) => {
+    const label = `${configName(config)} · ${config.cols} × ${config.rows} · ${config.mines} 颗雷`;
+    return new Option(label, key);
+  });
+  $("statistics-config").replaceChildren(...options);
+  const preferred = statisticsKey(config, statisticsMode);
+  if (choices.has(preferred)) $("statistics-config").value = preferred;
+  renderStatistics();
+}
+function showStatistics() {
+  statisticsMode = game.mode;
+  statisticsChoices();
+  if ($("preferences-dialog").open) $("preferences-dialog").close();
+  showDialog("statistics-dialog");
+  $("statistics-dialog").scrollTop = 0;
+}
+$("statistics").addEventListener("click", showStatistics);
+$("result-statistics").addEventListener("click", showStatistics);
+$("statistics-config").addEventListener("change", renderStatistics);
+document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const config = statisticsConfig($("statistics-config").value)?.config || game.config;
+    statisticsMode = button.dataset.statisticsMode;
+    statisticsChoices(config);
+  });
+});
 $("help").addEventListener("click", () => {
   $("preferences-dialog").close();
   showDialog("help-dialog");

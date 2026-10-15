@@ -10,6 +10,7 @@
 !/src/app.js
 !/src/board-view.js
 !/src/icons.js
+!/src/statistics.js
 !/src/engine.js
 !/src/restart-guard.js
 !/src/solver.js
