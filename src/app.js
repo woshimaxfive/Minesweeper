@@ -4,6 +4,7 @@ import { startGeneration } from "./generation-client.js";
 import { mountBoardView, fittedCellSize, boardDrag, CELL_GAP } from "./board-view.js";
 import { icon } from "./icons.js";
 import { restoreStatistics, recordStatistics, statisticsKey, statisticsConfig } from "./statistics.js";
+import { findHint } from "./hints.js";
 
 const $ = (id) => document.getElementById(id);
 document.querySelectorAll("[data-icon]").forEach((element) => {
@@ -57,6 +58,7 @@ const pointers = new Map();
 const activeInputs = new Set();
 let roundAction = null;
 let generation = null;
+let currentHint = null;
 let boardView = null, regularSizing = null, viewFitMinimum = 28;
 let viewAnchor = null;
 const board = $("board"),
@@ -122,6 +124,9 @@ function best() {
 }
 function render() {
   const ended = ["won", "lost"].includes(game.status);
+  const hint = currentHint?.kind === "none" ? null : currentHint;
+  const hintClues = new Set(hint?.clues), hintRegion = new Set(hint?.region),
+    hintMines = new Set(hint?.supportMines);
   board.dataset.state = game.status;
   game.cells.forEach((cell, index) => {
     const button = buttons[index];
@@ -134,12 +139,18 @@ function render() {
       showMine ? "mine" : "",
       wrong ? "wrong" : "",
       index === game.exploded ? "exploded" : "",
+      hintClues.has(index) ? "hint-clue" : "",
+      hintRegion.has(index) ? "hint-region" : "",
+      hintMines.has(index) ? "hint-support" : "",
+      hint?.index === index ? `hint-target hint-${hint.kind}` : "",
     ]
       .filter(Boolean)
       .join(" ");
     const symbol = wrong ? "close" : game.status === "won" && cell.mine
       ? "flag" : showMine ? "mine" : cell.flag ? "flag" : null;
-    if (symbol) button.innerHTML = icon(symbol);
+    if (hint?.index === index && !cell.flag)
+      button.innerHTML = icon(hint.kind === "safe" ? "check" : "mine");
+    else if (symbol) button.innerHTML = icon(symbol);
     else button.textContent = cell.open && cell.count ? cell.count : "";
     button.dataset.count = cell.open && !cell.mine ? cell.count : "";
     const state = wrong
@@ -155,8 +166,12 @@ function render() {
             : "未打开";
     button.setAttribute(
       "aria-label",
-      `第 ${Math.floor(index / game.config.cols) + 1} 行，第 ${(index % game.config.cols) + 1} 列，${state}`,
+      `第 ${Math.floor(index / game.config.cols) + 1} 行，第 ${(index % game.config.cols) + 1} 列，${state}` +
+        (hint?.index === index ? `，提示：${hint.kind === "safe" ? "安全格" : "必定有雷"}`
+          : hintClues.has(index) || hintMines.has(index) ? "，推理依据" : ""),
     );
+    if (hint?.index === index) button.setAttribute("aria-describedby", "hint-message");
+    else button.removeAttribute("aria-describedby");
     button.setAttribute("aria-disabled", String(ended));
   });
   $("remaining").textContent = String(
@@ -182,6 +197,46 @@ function render() {
   $("restart-label").textContent = game.practice ? "重试这盘练习" : "重新开始本局";
   setStatus();
   best();
+  renderHint();
+}
+function renderHint() {
+  $("hint-button").hidden = !game.practice || game.status !== "playing";
+  $("hint-button").disabled = paused || !!generation;
+  $("hint-panel").hidden = !currentHint || paused || !game.practice || game.status !== "playing";
+  $("hint-button").setAttribute("aria-expanded", String(!$("hint-panel").hidden));
+  if ($("hint-panel").hidden) return;
+  $("hint-title").textContent = currentHint.kind === "none" ? "暂时没找到确定的一步"
+    : `第 ${Math.floor(currentHint.index / game.config.cols) + 1} 行，第 ${currentHint.index % game.config.cols + 1} 列 · ${currentHint.kind === "safe" ? "安全格" : "是雷"}`;
+  $("hint-message").textContent = currentHint.kind === "none"
+    ? "根据当前线索，暂时没推导出确定的一步。" : currentHint.text;
+}
+function dismissHint() {
+  currentHint = null;
+  render();
+}
+function showHint() {
+  if (!game.practice || game.status !== "playing" || paused || generation ||
+      document.hidden || document.querySelector("dialog[open]")) return;
+  if (currentHint) { dismissHint(); return; }
+  clearGestures();
+  currentHint = findHint({ config: game.config,
+    clues: game.cells.map((cell) => cell.open ? cell.count : -1) },
+  { flagged: game.cells.flatMap((cell, i) => cell.flag ? [i] : []) });
+  render();
+  const hint = currentHint;
+  if (hint.kind === "none") return;
+  requestAnimationFrame(() => {
+    if (currentHint !== hint || paused) return;
+    const indices = [hint.index, ...hint.clues, ...hint.supportMines];
+    const cols = indices.map((i) => i % game.config.cols),
+      rows = indices.map((i) => Math.floor(i / game.config.cols));
+    const left = Math.min(...cols), right = Math.max(...cols),
+      top = Math.min(...rows), bottom = Math.max(...rows);
+    const fits = (right - left + 1) * (cellSize + CELL_GAP) + 6 <= viewport.clientWidth &&
+      (bottom - top + 1) * (cellSize + CELL_GAP) + 6 <= viewport.clientHeight;
+    restoreBoardPosition(fits ? { col: (left + right + 1) / 2, row: (top + bottom + 1) / 2 }
+      : { col: hint.index % game.config.cols + 0.5, row: Math.floor(hint.index / game.config.cols) + 0.5 });
+  });
 }
 function buildBoard() {
   board.replaceChildren();
@@ -271,6 +326,8 @@ function setPause(value) {
   $("pause").setAttribute("aria-label", paused ? "继续游戏" : "暂停游戏");
   $("pause").innerHTML = icon(paused ? "play" : "pause") +
     `<span>${paused ? "继续" : "暂停"}</span>`;
+  currentHint = null;
+  render();
   tickAt = performance.now();
   setStatus();
   save();
@@ -337,6 +394,7 @@ function act(index, action) {
   } else if (game.cells[index]?.open) changed = game.chord(index);
   else changed = game.reveal(index);
   if (!changed) return;
+  currentHint = null;
   tickAt = performance.now();
   render();
   if (action === "flag") buttons[index]?.classList.add("flag-feedback");
@@ -463,6 +521,7 @@ function startRound(next) {
   $("result-panel").hidden = true;
   viewAnchor = null;
   game = next;
+  currentHint = null;
   roundId = newRoundId();
   paused = false;
   tickAt = performance.now();
@@ -547,6 +606,8 @@ $("review-board").addEventListener("click", () => {
   roundAction = null;
 });
 $("review-result").addEventListener("click", showResult);
+$("hint-button").addEventListener("click", showHint);
+$("dismiss-hint").addEventListener("click", dismissHint);
 $("pause").addEventListener("click", () => setPause(!paused));
 $("resume").addEventListener("click", () => {
   setPause(false);

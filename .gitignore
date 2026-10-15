@@ -11,6 +11,7 @@
 !/src/board-view.js
 !/src/icons.js
 !/src/statistics.js
+!/src/hints.js
 !/src/engine.js
 !/src/restart-guard.js
 !/src/solver.js

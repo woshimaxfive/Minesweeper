@@ -3,9 +3,9 @@ import { Game, neighbors, validConfig } from "./engine.js";
 // Covered cells have clue -1. The deduction boundary accepts visible clues and
 // proven mines only, never the hidden layout or unverified player flags.
 export function deduce({ config, clues, knownMines = [] }, {
-  deadline = Infinity, now = () => performance.now(), maxConstraints = 400,
+  deadline = Infinity, now = () => performance.now(), maxConstraints = 400, explain = false,
 } = {}) {
-  const empty = (reason) => ({ safe: [], mines: [], reason });
+  const empty = (reason) => ({ safe: [], mines: [], reason, ...(explain ? { proofs: {} } : {}) });
   if (!validConfig(config) || clues.length !== config.rows * config.cols ||
       clues.some((n) => !Number.isInteger(n) || n < -1 || n > 8))
     return empty("invalid");
@@ -15,13 +15,17 @@ export function deduce({ config, clues, knownMines = [] }, {
   const unknown = clues.flatMap((n, i) => n === -1 && !proven.has(i) ? [i] : []);
   const remaining = config.mines - proven.size;
   const safe = new Set(), mines = new Set(), constraints = [], seen = new Map();
+  const proofs = {};
   let invalid = false, bounded = false;
-  function add(cells, count) {
+  function add(cells, count, evidence) {
     if (count < 0 || count > cells.length) { invalid = true; return; }
     if (!cells.length) return;
     if (count === 0 || count === cells.length) {
       const target = count === 0 ? safe : mines;
-      cells.forEach((i) => target.add(i));
+      cells.forEach((i) => {
+        target.add(i);
+        if (explain && !proofs[i]) proofs[i] = { ...evidence, cells, count };
+      });
       return;
     }
     const key = cells.join(",");
@@ -31,18 +35,20 @@ export function deduce({ config, clues, knownMines = [] }, {
     }
     if (constraints.length >= maxConstraints) { bounded = true; return; }
     seen.set(key, count);
-    constraints.push({ cells, count });
+    constraints.push({ cells, count, evidence });
   }
-  add(unknown, remaining);
+  add(unknown, remaining, explain ? { rule: "total", clues: [], knownMines: [...proven] } : null);
   for (let i = 0; i < clues.length; i++) {
     if (clues[i] < 0) continue;
     const adjacent = neighbors(config, i);
     add(adjacent.filter((n) => clues[n] === -1 && !proven.has(n)),
-      clues[i] - adjacent.filter((n) => proven.has(n)).length);
+      clues[i] - adjacent.filter((n) => proven.has(n)).length,
+      explain ? { rule: "clue", clues: [i], knownMines: adjacent.filter((n) => proven.has(n)) } : null);
   }
   function result() {
     if (invalid || [...safe].some((i) => mines.has(i))) return empty("invalid");
-    if (safe.size || mines.size) return { safe: [...safe], mines: [...mines], reason: "deduced" };
+    if (safe.size || mines.size) return { safe: [...safe], mines: [...mines], reason: "deduced",
+      ...(explain ? { proofs } : {}) };
     return empty(bounded ? "budget" : "stuck");
   }
   if (invalid || safe.size || mines.size) return result();
@@ -61,7 +67,9 @@ export function deduce({ config, clues, knownMines = [] }, {
       const difference = b.cells.filter((i) => !inside.has(i));
       const count = b.count - a.count;
       if (difference.length <= 8 || count <= 0 || count >= difference.length)
-        add(difference, count);
+        add(difference, count, explain ? { rule: "subset",
+          clues: [...new Set([...a.evidence.clues, ...b.evidence.clues])],
+          knownMines: [...new Set([...a.evidence.knownMines, ...b.evidence.knownMines])] } : null);
       if (invalid || safe.size || mines.size) return result();
     }
   }

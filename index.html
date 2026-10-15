@@ -71,8 +71,13 @@
             <button id="open-mode" class="selected" aria-pressed="true"><span data-icon="open"></span><span>开格</span></button>
             <button id="flag-mode" aria-pressed="false"><span data-icon="flag"></span><span>插旗</span></button>
           </div>
+          <button class="pause-button hint-button" id="hint-button" aria-label="推理提示" aria-controls="hint-panel" aria-expanded="false" hidden><span data-icon="hint"></span><span>提示</span></button>
           <button class="pause-button" id="pause" aria-label="暂停游戏"><span data-icon="pause"></span><span>暂停</span></button>
         </div>
+        <section class="hint-panel" id="hint-panel" aria-label="推理提示" role="status" aria-live="polite" hidden>
+          <div><strong id="hint-title"></strong><p id="hint-message"></p></div>
+          <button class="icon-button" id="dismiss-hint" aria-label="收起提示" title="收起提示"><span data-icon="close"></span></button>
+        </section>
         <p class="status" id="status" role="status" aria-live="polite">点一个格子开始</p>
       </section>
     </main>
@@ -137,6 +142,7 @@
         <p><strong>连开</strong>数字周围的旗数与数字相同时，点数字可打开剩余邻格。旗插错了也会踩雷。</p>
         <p><strong>两种玩法</strong>经典随机可能需要猜测。无猜支持初级、中级，棋盘经过推理验证；先开第一格再插旗，判断错误仍会踩雷。</p>
         <p><strong>再试这盘</strong>通关或踩雷后，可以重玩相同雷位，自动还原第一步，清除后续操作和计时。练习局的成绩单独记录；“新一局”开启新的正式对局。</p>
+        <p><strong>练习提示</strong>在练习局点“提示”，查看确定的一步和推理依据，再自己开格或插旗。粗框是目标，细框和虚线框是推理依据；提示只依据已打开的数字，插旗也会重新核对。暂时推不出结论时会说明。</p>
         <p><strong>全屏和横屏</strong>使用顶部按钮切换。大棋盘可拖动、双指缩放；“适应”按可用空间调整大小，缩放后仍可能需要拖动。</p>
         <p><strong>暂停和存档</strong>切到后台会暂停。进度保存在当前浏览器，清除站点数据会清除进度和成绩。首次缓存完成后可离线游玩。</p>
         <p><strong>电脑操作</strong>右键插旗。方向键移动，回车或空格操作，F 插旗。</p>
