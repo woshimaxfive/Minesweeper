@@ -40,6 +40,7 @@ const newRoundId = () => crypto.getRandomValues(new Uint32Array(4)).join("-");
 let roundId = restoredRound && typeof savedRound?.id === "string" && savedRound.id.length > 0 && savedRound.id.length <= 100
   ? savedRound.id : newRoundId();
 let statisticsMode = game.mode;
+let statisticsPractice = game.practice;
 let flagMode = preferences.flagMode === true;
 let cellSize = Number.isFinite(preferences.cellSize)
   ? Math.max(20, Math.min(60, preferences.cellSize))
@@ -106,17 +107,18 @@ function modes() {
 function defaultStatus() {
   if (generation || paused || ["won", "lost"].includes(game.status)) return "";
   if (game.status === "ready") return "点一个格子开始";
-  return flagMode ? "轻点插旗，再点取消" : "";
+  return flagMode ? "轻点插旗，再点取消" : game.practice ? "练习局 · 成绩单独记录" : "";
 }
 function setStatus(message = defaultStatus(), urgent = false) {
   $("status").textContent = message;
   $("status").classList.toggle("attention", urgent);
 }
 function best() {
-  const entry = statistics[statisticsKey(game.config, game.mode)];
+  const entry = statistics[statisticsKey(game.config, game.mode, game.practice)];
+  const label = game.practice ? "练习最佳用时" : "最佳用时";
   $("best").textContent = Number.isFinite(entry?.best)
-    ? `最佳用时 ${formatTime(entry.best)}`
-    : "最佳用时 —";
+    ? `${label} ${formatTime(entry.best)}`
+    : `${label} —`;
 }
 function render() {
   const ended = ["won", "lost"].includes(game.status);
@@ -169,10 +171,15 @@ function render() {
   $("board-spec").textContent =
     `${game.config.cols} × ${game.config.rows} · ${game.config.mines} 颗雷`;
   $("difficulty-name").textContent = configName(game.config);
-  $("game-mode").textContent = game.mode === "logic" ? "无猜" : "经典随机";
-  $("mode-description").textContent = game.mode === "logic"
-    ? "无猜：棋盘经过推理验证。"
+  $("game-mode").textContent = game.practice
+    ? game.mode === "logic" ? "无猜练习" : "经典练习"
+    : game.mode === "logic" ? "无猜" : "经典随机";
+  $("game-mode").classList.toggle("practice", game.practice);
+  $("mode-description").textContent = game.practice
+    ? "练习局保留雷位和第一步，成绩单独记录。"
+    : game.mode === "logic" ? "无猜：棋盘经过推理验证。"
     : "经典随机：部分局面需要猜测。";
+  $("restart-label").textContent = game.practice ? "重试这盘练习" : "重新开始本局";
   setStatus();
   best();
 }
@@ -283,8 +290,10 @@ function showResult() {
   const record = recordResult();
   const won = game.status === "won";
   $("result-mark").innerHTML = icon(won ? "check" : "mine");
-  $("result-title").textContent = won ? record?.newBest ? "通关 · 新纪录" : "通关" : "踩雷了";
-  $("result-description").textContent = won
+  const title = won ? "通关" : "踩雷了";
+  $("result-title").textContent = (game.practice ? `练习${title}` : title) +
+    (record?.newBest ? " · 新纪录" : "");
+  $("result-description").textContent = game.practice ? "本次成绩已归入练习局" : won
     ? record?.newBest ? "刷新了这项棋盘的最佳用时" : "安全格已全部打开"
     : "可以查看棋盘复盘";
   $("result-time").textContent = formatTime(game.elapsed);
@@ -293,9 +302,10 @@ function showResult() {
   $("result-panel").hidden = false;
   $("result-panel").classList.toggle("lost", !won);
   $("review-result").hidden = true;
+  $("replay-board").hidden = game.opening === null;
   if (roundAction) clearTimeout(roundAction.timer);
   roundAction = {
-    panel: $("result-panel"), button: $("play-again"), hint: $("result-restart-hint"),
+    panel: $("result-panel"), buttons: [$("play-again"), $("replay-board")], hint: $("result-restart-hint"),
     guard: new RestartGuard(activeInputs), timer: null,
   };
   updateRoundAction();
@@ -347,9 +357,9 @@ function updateRoundAction() {
   if (!roundAction) return;
   clearTimeout(roundAction.timer);
   const ready = roundAction.guard.ready();
-  roundAction.button.setAttribute("aria-disabled", String(!ready));
+  roundAction.buttons.forEach((button) => button.setAttribute("aria-disabled", String(!ready)));
   roundAction.hint.textContent = ready
-    ? "可以开始新一局"
+    ? "可以重试这盘或开始新一局"
     : "先松开手指，稍候再开始";
   if (!ready && roundAction.guard.active.size === 0)
     roundAction.timer = setTimeout(
@@ -445,14 +455,14 @@ async function beginGeneration(first) {
 }
 $("cancel-generation").addEventListener("click", cancelGeneration);
 
-function newGame(config, mode = game.mode) {
+function startRound(next) {
   cancelGeneration();
   clearGestures();
   if (roundAction) clearTimeout(roundAction.timer);
   roundAction = null;
   $("result-panel").hidden = true;
   viewAnchor = null;
-  game = new Game(config, mode);
+  game = next;
   roundId = newRoundId();
   paused = false;
   tickAt = performance.now();
@@ -473,6 +483,18 @@ function newGame(config, mode = game.mode) {
   initialFit();
   savePreferences();
   save();
+  if (["won", "lost"].includes(game.status)) showResult();
+}
+function newGame(config, mode = game.mode) {
+  startRound(new Game(config, mode));
+}
+function replayBoard() {
+  const next = game.replay();
+  if (!next) return;
+  startRound(next);
+  restoreBoardPosition({ col: game.opening % game.config.cols + 0.5,
+    row: Math.floor(game.opening / game.config.cols) + 0.5 });
+  buttons[game.opening]?.focus({ preventScroll: true });
 }
 document
   .querySelectorAll("[data-close]")
@@ -508,7 +530,11 @@ $("flag-mode").addEventListener("click", () => {
 });
 $("restart").addEventListener("click", () => {
   $("preferences-dialog").close();
-  newGame(game.config);
+  if (game.practice) replayBoard();
+  else newGame(game.config);
+});
+$("replay-board").addEventListener("click", () => {
+  if (roundActionAllowed()) replayBoard();
 });
 $("play-again").addEventListener("click", () => {
   if (!roundActionAllowed()) return;
@@ -535,6 +561,7 @@ function renderStatistics() {
   $("statistics-rate").textContent = entry.played
     ? `${Number((entry.wins / entry.played * 100).toFixed(1))}%` : "—";
   $("statistics-best").textContent = entry.best === null ? "—" : formatTime(entry.best);
+  $("statistics-scope").value = statisticsPractice ? "practice" : "formal";
   document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
     const selected = button.dataset.statisticsMode === statisticsMode;
     button.classList.toggle("selected", selected);
@@ -571,22 +598,23 @@ function renderStatistics() {
   $("statistics-history").replaceChildren(fragment);
   $("statistics-empty").hidden = records.length > 0;
   $("statistics-empty").textContent = entry.played
-    ? "还没有逐局记录。" : "完成一局后，这里会留下记录。";
+    ? "还没有逐局记录。" : statisticsPractice
+    ? "在结算中选择“再试这盘”，完成练习后留下记录。" : "完成一局后，这里会留下记录。";
   $("statistics-history-note").hidden = entry.played <= records.length;
   $("statistics-storage-note").textContent = storageAvailable
-    ? "只统计通关和踩雷的对局，中途重开不计入。成绩保存在当前浏览器。"
+    ? `${statisticsPractice ? "练习成绩单独计算，不影响正式战绩。" : "正式战绩不包含同盘练习。"}只统计通关和踩雷，中途重开不计入。成绩保存在当前浏览器。`
     : "当前浏览器无法保存成绩，关闭页面后本次成绩可能丢失。";
 }
 function statisticsChoices(config = game.config) {
   const choices = new Map();
   const add = (config) => {
     if (statisticsMode === "logic" && !supportsNoGuess(config)) return;
-    choices.set(statisticsKey(config, statisticsMode), config);
+    choices.set(statisticsKey(config, statisticsMode, statisticsPractice), config);
   };
   Object.values(PRESETS).forEach(add);
   Object.keys(statistics).forEach((key) => {
     const entry = statisticsConfig(key);
-    if (entry?.mode === statisticsMode) add(entry.config);
+    if (entry?.mode === statisticsMode && entry.practice === statisticsPractice) add(entry.config);
   });
   add(config);
   const options = Array.from(choices, ([key, config]) => {
@@ -594,12 +622,13 @@ function statisticsChoices(config = game.config) {
     return new Option(label, key);
   });
   $("statistics-config").replaceChildren(...options);
-  const preferred = statisticsKey(config, statisticsMode);
+  const preferred = statisticsKey(config, statisticsMode, statisticsPractice);
   if (choices.has(preferred)) $("statistics-config").value = preferred;
   renderStatistics();
 }
 function showStatistics() {
   statisticsMode = game.mode;
+  statisticsPractice = game.practice;
   statisticsChoices();
   if ($("preferences-dialog").open) $("preferences-dialog").close();
   showDialog("statistics-dialog");
@@ -608,6 +637,11 @@ function showStatistics() {
 $("statistics").addEventListener("click", showStatistics);
 $("result-statistics").addEventListener("click", showStatistics);
 $("statistics-config").addEventListener("change", renderStatistics);
+$("statistics-scope").addEventListener("change", () => {
+  const config = statisticsConfig($("statistics-config").value)?.config || game.config;
+  statisticsPractice = $("statistics-scope").value === "practice";
+  statisticsChoices(config);
+});
 document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     const config = statisticsConfig($("statistics-config").value)?.config || game.config;
@@ -909,7 +943,7 @@ boardView = mountBoardView({
     setStatus();
   },
   onStatus(message) {
-    if (!paused && !generation) setStatus(message);
+    if (!paused && !generation && !["won", "lost"].includes(game.status)) setStatus(message);
   },
 });
 theme();

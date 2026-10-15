@@ -43,6 +43,7 @@ export class Game {
       throw new Error("无猜模式目前支持初级和中级");
     this.config = { rows: config.rows, cols: config.cols, mines: config.mines };
     this.mode = mode;
+    this.practice = false;
     this.opening = null;
     this.cells = Array.from({ length: config.rows * config.cols }, () => ({
       mine: false,
@@ -135,6 +136,19 @@ export class Game {
     this.expand(targets);
     return true;
   }
+  replay() {
+    if ((!this.practice && !["won", "lost"].includes(this.status)) ||
+        this.opening === null || !this.cells[this.opening]?.open ||
+        [this.opening, ...this.neighbors(this.opening)].some((i) => this.cells[i].mine))
+      return null;
+    const game = new Game(this.config, this.mode);
+    game.cells = this.cells.map(({ mine, count }) => ({ mine, count, open: false, flag: false }));
+    game.opening = this.opening;
+    game.practice = true;
+    game.status = "playing";
+    game.expand([game.opening]);
+    return game;
+  }
   get flags() {
     return this.cells.filter((cell) => cell.flag).length;
   }
@@ -145,6 +159,7 @@ export class Game {
     return {
       version: 1,
       mode: this.mode,
+      practice: this.practice,
       opening: this.opening,
       config: this.config,
       cells: this.cells,
@@ -157,6 +172,8 @@ export class Game {
   static restore(data) {
     if (data?.version !== 1 || !validConfig(data.config)) return null;
     const mode = data.mode ?? "classic";
+    const practice = data.practice ?? false;
+    if (typeof practice !== "boolean") return null;
     if (!["classic", "logic"].includes(mode) ||
         (mode === "logic" && !supportsNoGuess(data.config))) return null;
     const opening = data.opening ?? null;
@@ -164,6 +181,7 @@ export class Game {
         opening >= data.config.rows * data.config.cols)) return null;
     const game = new Game(data.config, mode);
     game.opening = opening;
+    game.practice = practice;
     if (
       !Array.isArray(data.cells) ||
       data.cells.length !== game.cells.length ||
@@ -202,6 +220,9 @@ export class Game {
     game.exploded = data.exploded;
     game.recorded = data.recorded;
     if (game.flags > game.config.mines) return null;
+    if (practice && (game.status === "ready" || opening === null ||
+        !game.cells[opening].open ||
+        [opening, ...game.neighbors(opening)].some((i) => game.cells[i].mine))) return null;
     if (mode === "logic") {
       if (game.status === "ready") {
         if (opening !== null || game.flags) return null;

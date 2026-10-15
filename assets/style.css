@@ -30,7 +30,7 @@ button {
   transition: background 120ms, color 120ms;
 }
 button:disabled { opacity: .35; cursor: default; }
-#play-again[aria-disabled="true"] { opacity: .4; cursor: default; }
+.result-actions [aria-disabled="true"] { opacity: .4; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible, .statistics-history:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 [hidden] { display: none !important; }
 .icon { display: block; width: 20px; height: 20px; flex-shrink: 0; pointer-events: none; }
@@ -58,6 +58,7 @@ h1 .icon { width: 23px; height: 23px; }
 .difficulty-button { height: 44px; display: inline-flex; align-items: center; gap: 3px; padding: 0; font-size: 16px; font-weight: 600; }
 .difficulty-button .icon { width: 15px; height: 15px; }
 .game-mode { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.game-mode.practice { color: var(--accent); font-weight: 600; }
 .board-spec { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin-top: -3px; padding-bottom: 2px; font-variant-numeric: tabular-nums; }
 .metrics { gap: 20px; }
 .metric { gap: 7px; }
@@ -134,6 +135,8 @@ h1 .icon { width: 23px; height: 23px; }
 .result-actions { display: flex; gap: 8px; margin-top: 12px; }
 .result-actions button { flex: 1; }
 .result-actions .secondary { padding-inline: 10px; }
+.result-actions .result-utility { flex: 0 0 44px; padding: 10px; color: var(--muted); }
+.result-actions .primary { padding-inline: 10px; }
 .console:has(.result-panel:not([hidden])) .action-row { display: none; }
 #review-result { margin-left: auto; }
 dialog { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); box-shadow: 0 16px 60px #0002; }
@@ -171,7 +174,8 @@ input { accent-color: var(--accent); }
 .help-copy strong { display: block; margin-bottom: 3px; font-weight: 600; }
 #statistics-dialog { max-width: none; }
 .statistics-modes { margin-bottom: 14px; }
-.statistics-filter { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); }
+.statistics-filters { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 12px; }
+.statistics-filter { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 .statistics-filter select { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font-size: 14px; }
 .statistics-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
 .statistics-summary dt { font-size: 12px; color: var(--muted); }
@@ -263,13 +267,14 @@ button:active:not(.cell):not(:disabled) { filter: brightness(.9); }
 .board-wide .result-panel { grid-column: 1; grid-row: 4; padding: 8px; align-self: start; }
 .board-wide .result-summary { flex-wrap: wrap; gap: 5px; }
 .board-wide .result-summary > div:not(.result-stats) { flex: 1; }
+.board-wide .result-panel h2 { font-size: 15px; line-height: 1.25; }
 .board-wide .result-panel p, .board-wide .result-mark { display: none; }
 .board-wide .result-stats { width: 100%; margin: 3px 0 0; }
 .board-wide .result-stats small { display: none; }
 .board-wide .result-stats strong { font-size: 12px; }
-.board-wide .result-actions { margin-top: 6px; }
-.board-wide .result-actions .secondary { display: none; }
-.board-wide .result-actions .primary { font-size: 12px; padding-inline: 6px; }
+.board-wide .result-actions { margin-top: 6px; gap: 6px; }
+.board-wide .result-actions .result-utility { display: none; }
+.board-wide .result-actions .primary, .board-wide .result-actions .secondary { font-size: 12px; padding-inline: 4px; }
 .board-fullscreen.board-rotated .console { position: fixed; inset: auto; top: 0; left: 0; width: 100dvh; height: 100dvw; transform-origin: 0 0; transform: translateX(100dvw) rotate(90deg); padding-inline: max(8px, env(safe-area-inset-top), env(safe-area-inset-bottom)); padding-block: max(8px, env(safe-area-inset-left), env(safe-area-inset-right)); }
 .board-rotated dialog { inset: auto; left: 50%; top: 50%; margin: 0; width: min(440px, calc(100dvh - 24px)); max-height: calc(100dvw - 24px); border-radius: 14px; transform: translate(-50%, -50%) rotate(90deg); }
 @media (prefers-reduced-motion: reduce) {
