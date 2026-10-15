@@ -4,15 +4,15 @@ function describe(proof, config, clues) {
   const count = proof.cells.length;
   const safe = proof.count === 0;
   if (proof.rule === "total") return safe
-    ? `总共 ${config.mines} 颗雷都已由数字确定，其余未开格都是安全格。`
-    : `扣除已证明的雷后，还剩 ${proof.count} 颗雷和 ${count} 个未确定格，因此这些格都是雷。`;
+    ? `已从数字确定全部 ${config.mines} 颗雷，其余未开格都安全。`
+    : `扣除已确定的雷，剩余 ${proof.count} 颗雷恰好占满 ${count} 个未确定格。`;
   if (proof.rule === "subset")
-    return `对比高亮数字并排除共同范围后，剩余 ${count} 格${safe ? "都没有雷。" : "都必须是雷。"}`;
+    return `扣除高亮数字的共同范围，剩余 ${count} 格${safe ? "无雷。" : "全是雷。"}`;
   const clue = clues[proof.clues[0]];
-  if (safe) return `这个 ${clue} 周围的雷位已由线索确定，剩余相邻格可以安全打开。`;
+  if (safe) return `数字 ${clue} 周围的雷已确定，其余邻格安全。`;
   return proof.knownMines.length
-    ? `这个 ${clue} 周围扣除已证明的雷后，剩下 ${count} 格都必须是雷。`
-    : `这个 ${clue} 周围只剩 ${count} 个未开格，${count === 1 ? "雷只能在这里。" : `这 ${count} 格都必须是雷。`}`;
+    ? `数字 ${clue} 扣除已确定的雷后，剩余 ${count} 格全是雷。`
+    : `数字 ${clue} 周围只剩 ${count} 个未开格，${count === 1 ? "这格是雷。" : "这些格全是雷。"}`;
 }
 
 // The input contains visible clues only. Flags select useful targets; they are

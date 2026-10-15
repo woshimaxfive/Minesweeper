@@ -1,4 +1,4 @@
-const CACHE = "minesweeper-v13";
+const CACHE = "minesweeper-v14";
 const PREFIX = "minesweeper-";
 const ASSETS = [
   "./",

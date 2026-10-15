@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f5f2" />
-    <meta name="description" content="扫雷。支持无猜棋盘、手机横屏、本地存档和离线游玩。" />
+    <meta name="description" content="扫雷：无猜棋盘、手机横屏、本地存档与离线游玩。" />
     <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="assets/style.css" />
@@ -107,9 +107,9 @@
       </dl>
       <div class="history-heading"><h3>最近对局</h3><span>正式、练习各保留 50 局</span></div>
       <ol id="statistics-history" class="statistics-history" aria-label="最近对局" aria-live="polite" tabindex="0"></ol>
-      <p id="statistics-empty" class="statistics-empty">完成一局后，这里会留下记录。</p>
-      <p id="statistics-history-note" class="statistics-note" hidden>较早的对局仅保留累计成绩。</p>
-      <p id="statistics-storage-note" class="statistics-note">只统计通关和踩雷的对局，中途重开不计入。成绩保存在当前浏览器。</p>
+      <p id="statistics-empty" class="statistics-empty">完成一局后显示记录。</p>
+      <p id="statistics-history-note" class="statistics-note" hidden>较早对局仅有累计成绩。</p>
+      <p id="statistics-storage-note" class="statistics-note">仅计通关和踩雷，中途重开不计。成绩保存在当前浏览器。</p>
     </dialog>
     <dialog id="settings-dialog" aria-labelledby="settings-title">
       <form id="settings-form">
@@ -137,14 +137,14 @@
     <dialog id="help-dialog" aria-labelledby="help-title">
       <div class="dialog-heading"><h2 id="help-title">玩法说明</h2><button class="icon-button" data-close aria-label="关闭"><span data-icon="close"></span></button></div>
       <div class="help-copy">
-        <p>打开所有安全格子即可通关。数字表示周围八格中的雷数；首次点击及相邻格安全。</p>
-        <p><strong>开格和插旗</strong>轻点开格，长按插旗。也可以切到插旗模式，轻点标记，再点取消。</p>
-        <p><strong>连开</strong>数字周围的旗数与数字相同时，点数字可打开剩余邻格。旗插错了也会踩雷。</p>
-        <p><strong>两种玩法</strong>经典随机可能需要猜测。无猜支持初级、中级，棋盘经过推理验证；先开第一格再插旗，判断错误仍会踩雷。</p>
-        <p><strong>再试这盘</strong>通关或踩雷后，可以重玩相同雷位，自动还原第一步，清除后续操作和计时。练习局的成绩单独记录；“新一局”开启新的正式对局。</p>
-        <p><strong>练习提示</strong>在练习局点“提示”，查看确定的一步和推理依据，再自己开格或插旗。粗框是目标，细框和虚线框是推理依据；提示只依据已打开的数字，插旗也会重新核对。暂时推不出结论时会说明。</p>
-        <p><strong>全屏和横屏</strong>使用顶部按钮切换。大棋盘可拖动、双指缩放；“适应”按可用空间调整大小，缩放后仍可能需要拖动。</p>
-        <p><strong>暂停和存档</strong>切到后台会暂停。进度保存在当前浏览器，清除站点数据会清除进度和成绩。首次缓存完成后可离线游玩。</p>
+        <p>打开所有安全格即通关。数字表示周围八格的雷数；首点及相邻格安全。</p>
+        <p><strong>开格和插旗</strong>轻点开格，长按插旗；插旗模式下轻点标记，再点取消。</p>
+        <p><strong>连开</strong>数字周围旗数等于数字时，点数字连开其余邻格；旗插错可能踩雷。</p>
+        <p><strong>两种玩法</strong>经典随机可能需要猜测；无猜支持初级、中级，已通过推理验证。无猜须先开格再插旗，判断错误仍可能踩雷。</p>
+        <p><strong>再试这盘</strong>通关或踩雷后重玩同盘，保留雷位和第一步，重置后续操作与计时。练习成绩单独统计；点“新一局”开始正式局。</p>
+        <p><strong>练习提示</strong>点“提示”查看确定的一步，再手动开格或插旗。粗框为目标，细框和虚线框为依据。按已开数字和总雷数推理，旗帜会重新核对；推不出结论时会说明。</p>
+        <p><strong>全屏和横屏</strong>顶部切换。拖动查看大棋盘，双指缩放；“适应”调整格子大小，仍可能需要拖动。</p>
+        <p><strong>暂停和存档</strong>切到后台自动暂停。存档和成绩保存在当前浏览器，清除站点数据会一并删除。首次缓存后可离线游玩。</p>
         <p><strong>电脑操作</strong>右键插旗。方向键移动，回车或空格操作，F 插旗。</p>
       </div>
     </dialog>

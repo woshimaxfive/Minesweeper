@@ -191,8 +191,8 @@ function render() {
     : game.mode === "logic" ? "无猜" : "经典随机";
   $("game-mode").classList.toggle("practice", game.practice);
   $("mode-description").textContent = game.practice
-    ? "练习局保留雷位和第一步，成绩单独记录。"
-    : game.mode === "logic" ? "无猜：棋盘经过推理验证。"
+    ? "保留雷位和第一步，练习成绩单独记录。"
+    : game.mode === "logic" ? "无猜：已通过推理验证。"
     : "经典随机：部分局面需要猜测。";
   $("restart-label").textContent = game.practice ? "重试这盘练习" : "重新开始本局";
   setStatus();
@@ -205,10 +205,10 @@ function renderHint() {
   $("hint-panel").hidden = !currentHint || paused || !game.practice || game.status !== "playing";
   $("hint-button").setAttribute("aria-expanded", String(!$("hint-panel").hidden));
   if ($("hint-panel").hidden) return;
-  $("hint-title").textContent = currentHint.kind === "none" ? "暂时没找到确定的一步"
+  $("hint-title").textContent = currentHint.kind === "none" ? "暂无确定提示"
     : `第 ${Math.floor(currentHint.index / game.config.cols) + 1} 行，第 ${currentHint.index % game.config.cols + 1} 列 · ${currentHint.kind === "safe" ? "安全格" : "是雷"}`;
   $("hint-message").textContent = currentHint.kind === "none"
-    ? "根据当前线索，暂时没推导出确定的一步。" : currentHint.text;
+    ? "当前线索还推不出确定的一步。" : currentHint.text;
 }
 function dismissHint() {
   currentHint = null;
@@ -350,9 +350,9 @@ function showResult() {
   const title = won ? "通关" : "踩雷了";
   $("result-title").textContent = (game.practice ? `练习${title}` : title) +
     (record?.newBest ? " · 新纪录" : "");
-  $("result-description").textContent = game.practice ? "本次成绩已归入练习局" : won
-    ? record?.newBest ? "刷新了这项棋盘的最佳用时" : "安全格已全部打开"
-    : "可以查看棋盘复盘";
+  $("result-description").textContent = game.practice ? "成绩已记入练习" : won
+    ? record?.newBest ? "已刷新该棋盘最佳用时" : "安全格已全部打开"
+    : "可查看棋盘复盘";
   $("result-time").textContent = formatTime(game.elapsed);
   $("result-cleared").textContent =
     `${game.cleared} / ${game.cells.length - game.config.mines}`;
@@ -387,7 +387,7 @@ function act(index, action) {
     const limited = !game.cells[index]?.flag && game.flags >= game.config.mines;
     changed = game.flag(index);
     if (limited && !changed && !["won", "lost"].includes(game.status))
-      setStatus("旗帜已用完；先取消一面旗，再标记新的位置。");
+      setStatus("旗帜已用完，取消一面后可再插旗。");
   } else if (game.mode === "logic" && game.status === "ready" && game.cells[index]) {
     beginGeneration(index);
     return;
@@ -495,7 +495,7 @@ async function beginGeneration(first) {
     if (!next || next.mode !== "logic" || next.opening !== first ||
         !["playing", "won"].includes(next.status) ||
         !["rows", "cols", "mines"].every((key) => next.config[key] === original.config[key]))
-      throw new Error("生成结果无效，请重新打开第一格。");
+      throw new Error("生成结果无效，请再点第一格重试。");
     game = next;
     generation = null;
     tickAt = performance.now();
@@ -659,12 +659,12 @@ function renderStatistics() {
   $("statistics-history").replaceChildren(fragment);
   $("statistics-empty").hidden = records.length > 0;
   $("statistics-empty").textContent = entry.played
-    ? "还没有逐局记录。" : statisticsPractice
-    ? "在结算中选择“再试这盘”，完成练习后留下记录。" : "完成一局后，这里会留下记录。";
+    ? "暂无逐局记录。" : statisticsPractice
+    ? "结算后点“再试这盘”，完成练习即可记录。" : "完成一局后显示记录。";
   $("statistics-history-note").hidden = entry.played <= records.length;
   $("statistics-storage-note").textContent = storageAvailable
-    ? `${statisticsPractice ? "练习成绩单独计算，不影响正式战绩。" : "正式战绩不包含同盘练习。"}只统计通关和踩雷，中途重开不计入。成绩保存在当前浏览器。`
-    : "当前浏览器无法保存成绩，关闭页面后本次成绩可能丢失。";
+    ? `${statisticsPractice ? "练习成绩独立统计，不影响正式战绩。" : "正式战绩不含练习。"}仅计通关和踩雷，中途重开不计。成绩保存在当前浏览器。`
+    : "无法保存成绩，关闭页面后可能丢失。";
 }
 function statisticsChoices(config = game.config) {
   const choices = new Map();
@@ -744,7 +744,7 @@ function updateSettingsMode() {
     ? "首次点击及相邻格安全。"
     : "边长 6–40 格，雷数最多占 40%。";
   $("settings-mode-note").textContent = logic
-    ? "初级、中级支持无猜，棋盘经过推理验证。"
+    ? "无猜支持初级、中级，已通过推理验证。"
     : "支持所有难度，部分局面需要猜测。";
 }
 $("difficulty").addEventListener("click", () => {
@@ -1018,4 +1018,4 @@ new ResizeObserver(() => {
 if (game.status === "playing") setPause(true);
 else if (["won", "lost"].includes(game.status)) showResult();
 save();
-if (!storageAvailable) setStatus("无法保存进度，当前仍可游玩", true);
+if (!storageAvailable) setStatus("进度无法保存，仍可游玩", true);

@@ -17,5 +17,5 @@ export function generateNoGuess(config, first, {
     candidate.mode = "logic";
     return { round: candidate.serialize(), attempts };
   }
-  throw new Error("这次没生成成功，请再点第一格重试。");
+  throw new Error("未生成无猜棋盘，请再点第一格重试。");
 }

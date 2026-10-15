@@ -23,7 +23,7 @@ export function startGeneration(config, first, {
         event.preventDefault?.();
         if (finished) return;
         finish();
-        reject(new Error("当前浏览器无法生成无猜棋盘，请重试或选择经典随机。"));
+        reject(new Error("无猜棋盘生成失败，请重试或选经典随机。"));
       };
       worker.onmessageerror = () => {
         if (finished) return;
@@ -33,12 +33,12 @@ export function startGeneration(config, first, {
       timer = setTimeout(() => {
         if (finished) return;
         finish();
-        reject(new Error("这次生成用时较长，请再点第一格重试。"));
+        reject(new Error("生成超时，请再点第一格重试。"));
       }, timeoutMs);
       worker.postMessage({ config, first });
     } catch {
       finish();
-      reject(new Error("当前浏览器无法生成无猜棋盘，请选择经典随机。"));
+      reject(new Error("浏览器无法生成无猜棋盘，请选经典随机。"));
     }
   });
   return {
