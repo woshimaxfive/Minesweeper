@@ -1,9 +1,13 @@
 import { Game, PRESETS, validConfig, supportsNoGuess } from "./engine.js";
 import { RestartGuard } from "./restart-guard.js";
 import { startGeneration } from "./generation-client.js";
-import { mountBoardView, fittedCellSize, boardDrag } from "./board-view.js";
+import { mountBoardView, fittedCellSize, boardDrag, CELL_GAP } from "./board-view.js";
+import { icon } from "./icons.js";
 
 const $ = (id) => document.getElementById(id);
+document.querySelectorAll("[data-icon]").forEach((element) => {
+  element.innerHTML = icon(element.dataset.icon);
+});
 const KEY = "minesweeper:round:v1",
   PREFS = "minesweeper:prefs:v1",
   STATS = "minesweeper:stats:v1";
@@ -46,6 +50,7 @@ const activeInputs = new Set();
 let roundAction = null;
 let generation = null;
 let boardView = null, regularSizing = null, viewFitMinimum = 28;
+let viewAnchor = null;
 const board = $("board"),
   viewport = $("viewport");
 let dark = preferences.theme
@@ -83,10 +88,11 @@ function savePreferences() {
 }
 function theme() {
   document.documentElement.classList.toggle("dark", dark);
-  $("theme").setAttribute("aria-label", dark ? "切换浅色主题" : "切换深色主题");
+  $("theme").setAttribute("aria-pressed", String(dark));
+  $("theme-icon").innerHTML = icon(dark ? "sun" : "moon");
   document.querySelector('meta[name="theme-color"]').content = dark
-    ? "#182538"
-    : "#edf2f8";
+    ? "#202420"
+    : "#f5f5f2";
 }
 function modes() {
   $("open-mode").classList.toggle("selected", !flagMode);
@@ -95,17 +101,13 @@ function modes() {
   $("flag-mode").setAttribute("aria-pressed", String(flagMode));
 }
 function defaultStatus() {
-  if (generation) return "正在生成可推理通关的棋盘…";
-  if (game.status === "won") return "所有安全格子都找到了。做得好！";
-  if (game.status === "lost") return "这一格有雷。可以查看棋盘，或再来一局。";
-  if (paused) return "本局已暂停。";
-  if (game.status === "ready") return "选一个格子，开始这一局。";
-  return flagMode
-    ? "插旗模式：轻点标记，再点取消。"
-    : "轻点开格 · 长按插旗 · 拖动查看棋盘";
+  if (generation || paused || ["won", "lost"].includes(game.status)) return "";
+  if (game.status === "ready") return "点一个格子开始";
+  return flagMode ? "轻点插旗，再点取消" : "";
 }
-function setStatus(message = defaultStatus()) {
+function setStatus(message = defaultStatus(), urgent = false) {
   $("status").textContent = message;
+  $("status").classList.toggle("attention", urgent);
 }
 function best() {
   const entry = statistics[statsKey()];
@@ -115,6 +117,7 @@ function best() {
 }
 function render() {
   const ended = ["won", "lost"].includes(game.status);
+  board.dataset.state = game.status;
   game.cells.forEach((cell, index) => {
     const button = buttons[index];
     const showMine = ended && cell.mine;
@@ -129,17 +132,10 @@ function render() {
     ]
       .filter(Boolean)
       .join(" ");
-    button.textContent = wrong
-      ? "×"
-      : game.status === "won" && cell.mine
-        ? "⚑"
-        : showMine
-          ? "✳"
-          : cell.flag
-            ? "⚑"
-            : cell.open && cell.count
-              ? cell.count
-              : "";
+    const symbol = wrong ? "close" : game.status === "won" && cell.mine
+      ? "flag" : showMine ? "mine" : cell.flag ? "flag" : null;
+    if (symbol) button.innerHTML = icon(symbol);
+    else button.textContent = cell.open && cell.count ? cell.count : "";
     button.dataset.count = cell.open && !cell.mine ? cell.count : "";
     const state = wrong
       ? "错误旗帜"
@@ -164,13 +160,16 @@ function render() {
   $("progress").textContent =
     `已打开 ${game.cleared} / ${game.cells.length - game.config.mines}`;
   $("pause").disabled = game.status !== "playing";
+  $("open-mode").disabled = ended;
+  $("flag-mode").disabled = ended;
+  $("review-result").hidden = !ended || !$("result-panel").hidden;
   $("board-spec").textContent =
     `${game.config.cols} × ${game.config.rows} · ${game.config.mines} 颗雷`;
   $("difficulty-name").textContent = configName(game.config);
   $("game-mode").textContent = game.mode === "logic" ? "无猜" : "经典随机";
   $("mode-description").textContent = game.mode === "logic"
-    ? "无猜棋盘，每一步都有可推理的线索。"
-    : "经典随机棋盘，部分局面需要猜测。";
+    ? "无猜：棋盘经过推理验证。"
+    : "经典随机：部分局面需要猜测。";
   setStatus();
   best();
 }
@@ -179,6 +178,7 @@ function buildBoard() {
   buttons = [];
   focusIndex = 0;
   board.style.gridTemplateColumns = `repeat(${game.config.cols}, var(--cell-size))`;
+  board.style.setProperty("--cell-gap", `${CELL_GAP}px`);
   board.setAttribute("aria-rowcount", game.config.rows);
   board.setAttribute("aria-colcount", game.config.cols);
   const fragment = document.createDocumentFragment();
@@ -202,11 +202,27 @@ function buildBoard() {
   resizeCells(cellSize, false);
   render();
 }
-function resizeCells(size, persist = true) {
+function captureBoardPosition(point) {
+  if (!buttons.length) return null;
+  const area = viewport.getBoundingClientRect();
+  point ||= { x: area.left + area.width / 2, y: area.top + area.height / 2 };
+  const rect = board.getBoundingClientRect();
+  const x = boardView?.rotated ? point.y - rect.top : point.x - rect.left;
+  const y = boardView?.rotated ? rect.right - point.x : point.y - rect.top;
+  return { col: x / (cellSize + CELL_GAP), row: y / (cellSize + CELL_GAP) };
+}
+function restoreBoardPosition(anchor, point) {
+  if (!anchor) return;
+  const current = captureBoardPosition(point);
+  viewport.scrollLeft += (anchor.col - current.col) * (cellSize + CELL_GAP);
+  viewport.scrollTop += (anchor.row - current.row) * (cellSize + CELL_GAP);
+}
+function resizeCells(size, persist = true, anchor = captureBoardPosition(), point) {
   cellSize = Math.max(20, Math.min(60, Math.round(size)));
   board.style.setProperty("--cell-size", `${cellSize}px`);
   $("zoom-out").disabled = cellSize <= 20;
   $("zoom-in").disabled = cellSize >= 60;
+  restoreBoardPosition(anchor, point);
   if (persist) {
     autoFit = false;
     savePreferences();
@@ -221,7 +237,7 @@ function fit() {
   }
   resizeCells(
     Math.floor(
-      (viewport.clientWidth - (game.config.cols - 1) * 3) / game.config.cols,
+      (viewport.clientWidth - 6 - (game.config.cols - 1) * CELL_GAP) / game.config.cols,
     ),
   );
 }
@@ -233,7 +249,7 @@ function initialFit() {
   }
   if (game.config.cols === 9)
     resizeCells(
-      Math.min(44, Math.floor((viewport.clientWidth - 24) / 9)),
+      fittedCellSize(game.config, viewport.clientWidth, viewport.clientHeight, 28),
       false,
     );
 }
@@ -243,7 +259,8 @@ function setPause(value) {
   $("pause-cover").hidden = !paused;
   board.inert = paused;
   $("pause").setAttribute("aria-label", paused ? "继续游戏" : "暂停游戏");
-  $("pause").innerHTML = paused ? "▶ <span>继续</span>" : "Ⅱ <span>暂停</span>";
+  $("pause").innerHTML = icon(paused ? "play" : "pause") +
+    `<span>${paused ? "继续" : "暂停"}</span>`;
   tickAt = performance.now();
   setStatus();
   save();
@@ -272,16 +289,23 @@ function recordResult() {
 function showResult() {
   recordResult();
   const won = game.status === "won";
-  $("result-mark").textContent = won ? "⚑" : "✳";
-  $("result-title").textContent = won ? "安全着陆。" : "差一点，再来。";
-  $("result-caption").textContent = won ? "这一局，你赢了" : "这一局结束了";
+  $("result-mark").innerHTML = icon(won ? "check" : "mine");
+  $("result-title").textContent = won ? "通关" : "踩雷了";
   $("result-description").textContent = won
-    ? "所有安全格子都已打开。下一块棋盘等着你。"
-    : "踩到了一颗雷。留在棋盘上看看线索，或开始新的一局。";
+    ? "安全格已全部打开"
+    : "可以查看棋盘复盘";
   $("result-time").textContent = formatTime(game.elapsed);
   $("result-cleared").textContent =
     `${game.cleared} / ${game.cells.length - game.config.mines}`;
-  showDialog("result-dialog");
+  $("result-panel").hidden = false;
+  $("result-panel").classList.toggle("lost", !won);
+  $("review-result").hidden = true;
+  if (roundAction) clearTimeout(roundAction.timer);
+  roundAction = {
+    panel: $("result-panel"), button: $("play-again"), hint: $("result-restart-hint"),
+    guard: new RestartGuard(activeInputs), timer: null,
+  };
+  updateRoundAction();
 }
 function act(index, action) {
   if (
@@ -312,6 +336,7 @@ function act(index, action) {
   if (!changed) return;
   tickAt = performance.now();
   render();
+  if (action === "flag") buttons[index]?.classList.add("flag-feedback");
   save();
   if (["won", "lost"].includes(game.status) && before !== game.status)
     showResult();
@@ -324,21 +349,6 @@ function showDialog(id) {
     setPause(true);
   }
   $(id).showModal();
-  const actions = {
-    "result-dialog": ["play-again", "result-restart-hint"],
-  };
-  if (actions[id]) {
-    if (roundAction) clearTimeout(roundAction.timer);
-    const [button, hint] = actions[id];
-    roundAction = {
-      dialog: $(id),
-      button: $(button),
-      hint: $(hint),
-      guard: new RestartGuard(activeInputs),
-      timer: null,
-    };
-    updateRoundAction();
-  }
 }
 function updateRoundAction() {
   if (!roundAction) return;
@@ -346,26 +356,25 @@ function updateRoundAction() {
   const ready = roundAction.guard.ready();
   roundAction.button.setAttribute("aria-disabled", String(!ready));
   roundAction.hint.textContent = ready
-    ? "点击再来一局，开始一张新棋盘。"
-    : "先松开手指，稍等一下再开始。";
+    ? "可以开始新一局"
+    : "先松开手指，稍候再开始";
   if (!ready && roundAction.guard.active.size === 0)
     roundAction.timer = setTimeout(
       updateRoundAction,
       Math.max(0, roundAction.guard.until - performance.now()),
     );
 }
-function roundActionAllowed(id) {
+function roundActionAllowed() {
   return (
-    roundAction?.dialog.id === id &&
-    roundAction.dialog.open &&
+    roundAction && !roundAction.panel.hidden &&
     roundAction.guard.ready()
   );
 }
-// Capture input before board actions can open a dialog, including held keys.
+// Capture input before a result appears, including held keys.
 function trackInput(input, pressed) {
   if (pressed) activeInputs.add(input);
   else activeInputs.delete(input);
-  if (!roundAction?.dialog.open) return;
+  if (!roundAction || roundAction.panel.hidden) return;
   if (pressed) roundAction.guard.press(input);
   else roundAction.guard.release(input);
   updateRoundAction();
@@ -438,7 +447,7 @@ async function beginGeneration(first) {
     if (generation !== job) return;
     generation = null;
     generationView(false);
-    setStatus(error.message);
+    setStatus(error.message, true);
   }
 }
 $("cancel-generation").addEventListener("click", cancelGeneration);
@@ -446,19 +455,23 @@ $("cancel-generation").addEventListener("click", cancelGeneration);
 function newGame(config, mode = game.mode) {
   cancelGeneration();
   clearGestures();
+  if (roundAction) clearTimeout(roundAction.timer);
+  roundAction = null;
+  $("result-panel").hidden = true;
+  viewAnchor = null;
   game = new Game(config, mode);
   paused = false;
   tickAt = performance.now();
   $("timer").textContent = "00:00";
   $("pause-cover").hidden = true;
   board.inert = false;
-  $("pause").innerHTML = "Ⅱ <span>暂停</span>";
+  $("pause").innerHTML = icon("pause") + "<span>暂停</span>";
   $("pause").setAttribute("aria-label", "暂停游戏");
   modalWasPlaying = false;
   autoFit = game.config.cols === 9;
   if (boardView?.active) {
     regularSizing = { cellSize: 38, autoFit,
-      scrollX: 0, scrollY: 0 };
+    };
     autoFit = true;
     viewFitMinimum = 28;
   }
@@ -474,10 +487,6 @@ document
   );
 document.querySelectorAll("dialog").forEach((dialog) => {
   dialog.addEventListener("close", () => {
-    if (roundAction?.dialog === dialog) {
-      clearTimeout(roundAction.timer);
-      roundAction = null;
-    }
     if (document.querySelector("dialog[open]")) return;
     if (modalWasPlaying) {
       modalWasPlaying = false;
@@ -503,18 +512,31 @@ $("flag-mode").addEventListener("click", () => {
   savePreferences();
   setStatus();
 });
-$("restart").addEventListener("click", () => newGame(game.config));
-$("play-again").addEventListener("click", () => {
-  if (!roundActionAllowed("result-dialog")) return;
-  $("result-dialog").close();
+$("restart").addEventListener("click", () => {
+  $("preferences-dialog").close();
   newGame(game.config);
 });
+$("play-again").addEventListener("click", () => {
+  if (!roundActionAllowed()) return;
+  newGame(game.config);
+});
+$("review-board").addEventListener("click", () => {
+  $("result-panel").hidden = true;
+  $("review-result").hidden = false;
+  clearTimeout(roundAction?.timer);
+  roundAction = null;
+});
+$("review-result").addEventListener("click", showResult);
 $("pause").addEventListener("click", () => setPause(!paused));
 $("resume").addEventListener("click", () => {
   setPause(false);
   buttons[focusIndex]?.focus({ preventScroll: true });
 });
-$("help").addEventListener("click", () => showDialog("help-dialog"));
+$("preferences").addEventListener("click", () => showDialog("preferences-dialog"));
+$("help").addEventListener("click", () => {
+  $("preferences-dialog").close();
+  showDialog("help-dialog");
+});
 $("zoom-in").addEventListener("click", () => resizeCells(cellSize + 4));
 $("zoom-out").addEventListener("click", () => resizeCells(cellSize - 4));
 $("fit").addEventListener("click", fit);
@@ -530,8 +552,6 @@ function customLimit() {
 );
 $("settings-form").addEventListener("change", () => {
   updateSettingsMode();
-  $("custom-fields").disabled =
-    $("settings-form").elements.level.value !== "custom";
 });
 function updateSettingsMode() {
   const form = $("settings-form");
@@ -542,9 +562,13 @@ function updateSettingsMode() {
   if (logic && !["easy", "medium"].includes(form.elements.level.value))
     form.elements.level.value = "medium";
   $("custom-fields").disabled = form.elements.level.value !== "custom";
+  $("custom-fields").hidden = $("custom-fields").disabled;
+  $("settings-note").textContent = $("custom-fields").disabled
+    ? "首次点击及相邻格安全。"
+    : "边长 6–40 格，雷数最多占 40%。";
   $("settings-mode-note").textContent = logic
-    ? "无猜模式目前支持初级和中级，棋盘可全程推理通关。"
-    : "经典随机支持所有难度，部分局面需要猜测。";
+    ? "初级、中级支持无猜，棋盘经过推理验证。"
+    : "支持所有难度，部分局面需要猜测。";
 }
 $("difficulty").addEventListener("click", () => {
   const level =
@@ -554,7 +578,6 @@ $("difficulty").addEventListener("click", () => {
   $("settings-form").elements.level.value = level;
   $("settings-form").elements.gameMode.value = game.mode;
   updateSettingsMode();
-  $("custom-fields").disabled = level !== "custom";
   $("rows").value = game.config.rows;
   $("cols").value = game.config.cols;
   $("mines").value = game.config.mines;
@@ -588,12 +611,13 @@ function distance(a, b) {
 }
 function clearGestures() {
   pointers.forEach((pointer) => clearTimeout(pointer.hold));
+  board.querySelectorAll(".pressing").forEach((cell) => cell.classList.remove("pressing"));
   pointers.clear();
   pinch = null;
   moving = false;
 }
 viewport.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || paused) return;
+  if (event.button !== 0 || paused || generation) return;
   const cell = event.target.closest(".cell");
   const pointer = {
     x: event.clientX,
@@ -610,13 +634,17 @@ viewport.addEventListener("pointerdown", (event) => {
   viewport.setPointerCapture(event.pointerId);
   if (pointers.size === 1) {
     moving = false;
-    pointer.hold = setTimeout(() => {
-      if (pointer.moved || pointers.size !== 1 || pointer.index === null)
-        return;
-      pointer.held = true;
-      act(pointer.index, "flag");
-    }, 420);
+    if (!["won", "lost"].includes(game.status)) {
+      cell?.classList.add("pressing");
+      pointer.hold = setTimeout(() => {
+        if (pointer.moved || pointers.size !== 1 || pointer.index === null)
+          return;
+        pointer.held = true;
+        act(pointer.index, "flag");
+      }, 420);
+    }
   } else {
+    board.querySelectorAll(".pressing").forEach((button) => button.classList.remove("pressing"));
     pointers.forEach((p) => {
       clearTimeout(p.hold);
       p.moved = true;
@@ -624,7 +652,8 @@ viewport.addEventListener("pointerdown", (event) => {
     moving = true;
     autoFit = false;
     const [a, b] = [...pointers.values()];
-    pinch = { distance: distance(a, b), size: cellSize };
+    const point = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    pinch = { distance: distance(a, b), size: cellSize, anchor: captureBoardPosition(point) };
   }
 });
 viewport.addEventListener("pointermove", (event) => {
@@ -635,7 +664,8 @@ viewport.addEventListener("pointermove", (event) => {
   if (pointers.size > 1) {
     const [a, b] = [...pointers.values()];
     if (pinch?.distance > 0)
-      resizeCells((pinch.size * distance(a, b)) / pinch.distance, false);
+      resizeCells((pinch.size * distance(a, b)) / pinch.distance, false, pinch.anchor,
+        { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
     return;
   }
   const dx = event.clientX - pointer.startX,
@@ -644,6 +674,7 @@ viewport.addEventListener("pointermove", (event) => {
     pointer.moved = true;
     moving = true;
     clearTimeout(pointer.hold);
+    buttons[pointer.index]?.classList.remove("pressing");
   }
   if (pointer.moved && !pointer.held) {
     const delta = boardDrag(dx, dy, boardView?.rotated);
@@ -655,6 +686,7 @@ viewport.addEventListener("pointerup", (event) => {
   const pointer = pointers.get(event.pointerId);
   if (!pointer) return;
   clearTimeout(pointer.hold);
+  buttons[pointer.index]?.classList.remove("pressing");
   const wasPinch = !!pinch;
   if (wasPinch) savePreferences();
   pointers.delete(event.pointerId);
@@ -774,24 +806,24 @@ if ("serviceWorker" in navigator && window.isSecureContext) {
     });
 }
 boardView = mountBoardView({
+  onBeforeChange() { viewAnchor = captureBoardPosition(); },
   onChange({ active }) {
     clearGestures();
     if (active && !regularSizing) {
-      regularSizing = { cellSize, autoFit,
-        scrollX: viewport.scrollLeft, scrollY: viewport.scrollTop };
-      autoFit = true;
+      regularSizing = { cellSize, autoFit };
       viewFitMinimum = 28;
     } else if (!active && regularSizing) {
       const sizing = regularSizing;
       regularSizing = null;
       autoFit = sizing.autoFit;
       resizeCells(sizing.cellSize, false);
-      requestAnimationFrame(() => {
-        viewport.scrollTo(sizing.scrollX, sizing.scrollY);
-      });
       savePreferences();
     }
-    requestAnimationFrame(() => { if (autoFit) initialFit(); });
+    const anchor = viewAnchor;
+    requestAnimationFrame(() => {
+      if (autoFit) initialFit();
+      restoreBoardPosition(anchor);
+    });
     setStatus();
   },
   onStatus(message) {
@@ -807,7 +839,6 @@ new ResizeObserver(() => {
   if (autoFit) initialFit();
 }).observe(viewport);
 if (game.status === "playing") setPause(true);
-else if (["won", "lost"].includes(game.status) && !game.recorded)
-  recordResult();
+else if (["won", "lost"].includes(game.status)) showResult();
 save();
-if (!storageAvailable) setStatus("浏览器无法保存进度；当前仍可游玩。");
+if (!storageAvailable) setStatus("无法保存进度，当前仍可游玩", true);

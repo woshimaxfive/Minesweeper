@@ -1,6 +1,10 @@
+import { icon } from "./icons.js";
+
+export const CELL_GAP = 2;
+
 export function fittedCellSize(config, width, height = Infinity, minimum = 20) {
-  const across = (width - 2 - (config.cols - 1) * 3) / config.cols;
-  const down = (height - 2 - (config.rows - 1) * 3) / config.rows;
+  const across = (width - 6 - (config.cols - 1) * CELL_GAP) / config.cols;
+  const down = (height - 6 - (config.rows - 1) * CELL_GAP) / config.rows;
   return Math.max(minimum, Math.min(60, Math.floor(Math.min(across, down))));
 }
 
@@ -9,7 +13,7 @@ export function boardDrag(dx, dy, rotated) {
   return rotated ? { x: dy, y: -dx } : { x: dx, y: dy };
 }
 
-export function mountBoardView({ onChange, onStatus }) {
+export function mountBoardView({ onBeforeChange, onChange, onStatus }) {
   const root = document.documentElement;
   const expand = document.getElementById("expand-board");
   const landscape = document.getElementById("landscape-board");
@@ -18,20 +22,24 @@ export function mountBoardView({ onChange, onStatus }) {
   let lastState = "";
 
   function sync() {
-    rotated = active && wantsLandscape && window.innerHeight > window.innerWidth;
-    wide = active && (rotated || window.innerWidth > window.innerHeight);
+    const nextRotated = active && wantsLandscape && window.innerHeight > window.innerWidth;
+    const nextWide = nextRotated || (window.innerWidth > window.innerHeight && (active || window.innerHeight <= 560));
+    const state = `${active}:${nextRotated}:${nextWide}`;
+    if (state !== lastState) onBeforeChange?.();
+    rotated = nextRotated;
+    wide = nextWide;
     root.classList.toggle("board-fullscreen", active);
     root.classList.toggle("board-wide", wide);
     root.classList.toggle("board-rotated", rotated);
     expand.setAttribute("aria-pressed", String(active));
     expand.setAttribute("aria-label", active ? "退出棋盘全屏" : "棋盘全屏");
     expand.title = active ? "退出全屏" : "棋盘全屏";
-    expand.textContent = active ? "×" : "⛶";
-    landscape.hidden = !active;
+    expand.innerHTML = icon(active ? "collapse" : "expand");
     landscape.setAttribute("aria-pressed", String(wantsLandscape));
     landscape.setAttribute("aria-label", wantsLandscape ? "跟随手机方向" : "横屏棋盘");
-    landscape.textContent = wantsLandscape ? "随方向" : "横屏";
-    const state = `${active}:${rotated}:${wide}`;
+    landscape.title = wantsLandscape ? "跟随手机方向" : "横屏棋盘";
+    landscape.innerHTML = icon(wantsLandscape ? "follow" : "landscape") +
+      `<span class="button-label">${wantsLandscape ? "跟随" : "横屏"}</span>`;
     if (state !== lastState) {
       lastState = state;
       onChange({ active, rotated, wide });
@@ -58,7 +66,7 @@ export function mountBoardView({ onChange, onStatus }) {
     }
     sync();
     if (active && wantsLandscape && rotated)
-      onStatus("画面已横过来，请横握手机。再点“随方向”可恢复自动布局。");
+      onStatus("横屏已开启，可横握手机");
   }
   async function exitNative() {
     if (document.fullscreenElement !== root) return;
@@ -72,8 +80,9 @@ export function mountBoardView({ onChange, onStatus }) {
     sync();
     exitNative();
   }
-  function enter() {
+  function enter(landscapeRequested = false) {
     const ticket = ++revision;
+    wantsLandscape = landscapeRequested;
     active = true;
     sync();
     // Request directly in the click handler to retain transient user activation.
@@ -90,17 +99,18 @@ export function mountBoardView({ onChange, onStatus }) {
           if (wantsLandscape) lockLandscape();
         }).catch(() => {
           if (active && ticket === revision)
-            onStatus("已铺满页面。可点“横屏”，或直接将手机横过来。");
+            onStatus(wantsLandscape ? "横屏已开启，可横握手机" : "已铺满页面");
         });
       } catch {
-        onStatus("已铺满页面。可点“横屏”，或直接将手机横过来。");
+        onStatus(wantsLandscape ? "横屏已开启，可横握手机" : "已铺满页面");
       }
     } else {
-      onStatus("已铺满页面。可点“横屏”，或直接将手机横过来。");
+      onStatus(wantsLandscape ? "横屏已开启，可横握手机" : "已铺满页面");
     }
   }
   expand.addEventListener("click", () => active ? exit() : enter());
   landscape.addEventListener("click", () => {
+    if (!active) { enter(true); return; }
     wantsLandscape = !wantsLandscape;
     if (!wantsLandscape) unlock();
     sync();
@@ -125,6 +135,7 @@ export function mountBoardView({ onChange, onStatus }) {
   });
   window.addEventListener("resize", sync);
   screen.orientation?.addEventListener?.("change", sync);
+  queueMicrotask(sync);
   return {
     get active() { return active; },
     get rotated() { return rotated; },
